@@ -1,4 +1,4 @@
-# CSH research project Jim Krüger
+# CSH research project Tim Krüger
 
 ### Materials: 
 - [Presentation](https://complexitysciencehubvienna-my.sharepoint.com/:b:/g/personal/steiglechner_csh_ac_at/IQASyHUruNvKTIAx56A2lWNoAezLSSkZ31WqX_xBt8DgnJQ?e=WrF7cb)
