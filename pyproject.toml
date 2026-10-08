@@ -1,0 +1,17 @@
+[project]
+name = "adaptive-networks-beliefs-tim"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "igraph>=1.0.0",
+    "ipykernel>=7.4.0",
+    "joblib>=1.6.0",
+    "networkx>=3.7",
+    "numpy>=2.5.3",
+    "pandas>=3.0.6",
+    "scipy>=1.18.1",
+    "seaborn>=0.13.2",
+    "xarray>=2026.9.0",
+]
