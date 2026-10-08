@@ -5,15 +5,10 @@ import numpy as np
 import pandas as pd
 from itertools import combinations
 import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
 import seaborn as sns
 import matplotlib as mpl
 import matplotlib.patches as mpatches
-from scipy.spatial.distance import pdist
 import os 
-import matplotlib.path as mpath
-import numpy as np
 
 plt.rcParams.update({"font.size": 10})
 bigfs = 9
