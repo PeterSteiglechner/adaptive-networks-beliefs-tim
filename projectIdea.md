@@ -3,7 +3,7 @@
 ### Materials: 
 - [Presentation](https://complexitysciencehubvienna-my.sharepoint.com/:b:/g/personal/steiglechner_csh_ac_at/IQASyHUruNvKTIAx56A2lWNoAezLSSkZ31WqX_xBt8DgnJQ?e=WrF7cb)
 - [Preprint](https://doi.org/10.31234/osf.io/uxkg6_v1)   Steiglechner, P., Poulsen, V., Galesic, M., & Olsson, H. (2026, June 17). Heterogeneous, Adaptive Networks of Beliefs. Retrieved from osf.io/preprints/psyarxiv/uxkg6_v1
-- [Github repo]()
+- [Github repo](https://github.com/PeterSteiglechner/adaptive-networks-beliefs-tim.git)
  
 ### Project Ideas
 change the social network in the Adaptive Networks of Beliefs model. 
@@ -19,3 +19,4 @@ Next steps:
 - get familiar with code
 - design and write proposal
 - find supervisor at TU e.g. [Stefan Neumann](https://informatics.tuwien.ac.at/people/stefan-neumann)
+s
