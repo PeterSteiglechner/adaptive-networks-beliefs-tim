@@ -2,6 +2,8 @@
 
 Simulation code accompanying our recent project on Adaptive Networks of Beliefs (ANB)
 
+Detailed documentation of the model and analysis scripts: [`docu/`](docu/README.md)
+
 ## Setup & Run
 
 This project uses [uv](https://docs.astral.sh/uv/) to manage python packages (see the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/))

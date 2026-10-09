@@ -1,2 +1,3 @@
 simOut/
 .venv
+/__pycache__/
