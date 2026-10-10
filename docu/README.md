@@ -8,6 +8,7 @@ Code documentation for the ANB model and its analysis pipeline. The theory and r
 | Document | Contents |
 |----------|----------|
 | [model.md](model.md) | How `ANBmodel.py` implements the theory: parameters, data layout, belief and edge updating, metrics, response classification, output format, caveats |
+| [system-overview.md](system-overview.md) | Mermaid diagrams: the config → simulation → CSV → analysis → figures pipeline, and the inside of one simulation run |
 | [running-simulations.md](running-simulations.md) | How to configure runs, filename conventions, and exactly which simulations each analysis script needs |
 | [known-issues.md](known-issues.md) | Open bugs and inconsistencies in the model and analysis code, each with location, impact and a suggested fix |
 | [analysis.md](analysis.md) | What each `analyse_*.py` script computes and which paper figure or table it produces |
