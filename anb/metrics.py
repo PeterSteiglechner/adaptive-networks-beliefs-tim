@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import igraph as ig
 import numpy as np
 import pandas as pd
 
@@ -102,6 +103,29 @@ class ExternalEnergy(Metric):
 
     def compute(self, ctx):
         return -ctx.ext * ctx.model.state.focal_beliefs()
+
+
+class FocalBetweenness(Metric):
+    """bc_foc: igraph betweenness of the focal belief in the agent's own (complete) belief network.
+
+    Edge lengths follow legacy: 1 / (|w| + 1e-6), and 1e9 for an edge with w = 0 (kept in the graph, so all
+    M(M−1)/2 edges always exist). Unnormalised, undirected.
+    """
+
+    name = "bc_foc"
+    LENGTH_EPS = 1e-6
+    ZERO_EDGE_LENGTH = 1e9
+
+    def compute(self, ctx):
+        state = ctx.model.state
+        rows, cols = np.triu_indices(state.n_beliefs, k=1)
+        abs_w = np.abs(state.edge_weights[:, rows, cols])  # (N, E)
+        lengths = np.where(abs_w > 0, 1.0 / (abs_w + self.LENGTH_EPS), self.ZERO_EDGE_LENGTH)
+        graph = ig.Graph(n=state.n_beliefs, edges=list(zip(rows.tolist(), cols.tolist())), directed=False)
+        return np.array([
+            graph.betweenness(vertices=int(f), weights=row.tolist(), directed=False)
+            for f, row in zip(state.focal, lengths)
+        ])
 
 
 class NonFocalExtremity(Metric):

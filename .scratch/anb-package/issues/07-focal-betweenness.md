@@ -4,9 +4,14 @@
 
 **Blocked by:** 05 (Energy metrics + legacy-state harness)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `FocalBetweenness.compute` equals legacy `bc_foc` to floating-point tolerance on several random legacy states, through the ticket-05 harness
-- [ ] Uses the same edge-weight to distance transform, normalisation and treatment of zero/negative edges as legacy
-- [ ] Respects each agent's per-agent `focal`
-- [ ] Wall time per tracked step is recorded in the test output or a note, as the baseline for ticket 11's profiling
+- [x] `FocalBetweenness.compute` equals legacy `bc_foc` to floating-point tolerance on several random legacy states, through the ticket-05 harness
+- [x] Uses the same edge-weight to distance transform, normalisation and treatment of zero/negative edges as legacy
+- [x] Respects each agent's per-agent `focal`
+- [x] Wall time per tracked step is recorded in the test output or a note, as the baseline for ticket 11's profiling
+
+**Timing baseline (for ticket 11):** `FocalBetweenness.compute` takes about 1.3 ms per tracked step at N = 100,
+M = 10 (one `igraph.Graph` reused, one `betweenness` call per agent). Legacy's whole `get_metrics` (all seven BN
+metrics, a fresh graph per agent) takes about 3.3 ms on the same state. Re-measure with
+`pytest -m slow tests/test_focal_betweenness.py -s`.
