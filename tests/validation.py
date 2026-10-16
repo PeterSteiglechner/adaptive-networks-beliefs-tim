@@ -103,8 +103,9 @@ def collect(impl: str, seeds, cache_dir: Path, n_jobs: int = -1) -> pd.DataFrame
     for k, (config, pressure) in enumerate(missing):
         cell = pd.DataFrame(rows[k * len(seeds):(k + 1) * len(seeds)])
         cell.insert(0, "seed", seeds)
-        cell.to_csv(cache_dir / f"{impl}_{config}_s{pressure}.csv", index=False)
-        cells[config, pressure] = cell
+        path = cache_dir / f"{impl}_{config}_s{pressure}.csv"
+        cell.to_csv(path, index=False)
+        cells[config, pressure] = pd.read_csv(path)  # as cached cells are: CSV rounds floats by up to an ulp
     return pd.concat(
         [cell.assign(config=config, pressure=pressure) for (config, pressure), cell in cells.items()],
         ignore_index=True,
