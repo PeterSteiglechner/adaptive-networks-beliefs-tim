@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from anb.metrics import ExternalEnergy, FocalPersonalEnergy, NonFocalExtremity, PersonalEnergy, SocialEnergy
-from legacy_oracle import legacy_and_anb
+from legacy_oracle import legacy_and_anb, refocus_randomly
 
 ISOLATED = (3, 41, 77)
 # (seed, t, ext_strength): t = 120 lies inside legacy's pressure event (t = 101…150), t = 50 and t = 180 don't.
@@ -71,14 +71,6 @@ def test_metrics_follow_each_agents_focal_dimension(legacy, metric):
     """Swapping belief dimensions 0 and k and setting focal = k leaves every metric unchanged."""
     _, ctx = both_sides(legacy, seed=7, t=120, ext_strength=4.0)
     before = metric.compute(ctx)
-    state = ctx.model.state
-    rng = np.random.default_rng(0)
-    focal = rng.integers(state.n_beliefs, size=state.n_agents)
-    for i, k in enumerate(focal):
-        perm = np.arange(state.n_beliefs)
-        perm[[0, k]] = perm[[k, 0]]
-        state.beliefs[i] = state.beliefs[i, perm]
-        state.edge_weights[i] = state.edge_weights[i][np.ix_(perm, perm)]
-    state.focal[:] = focal
+    refocus_randomly(ctx.model.state, np.random.default_rng(0))
 
     np.testing.assert_allclose(metric.compute(ctx), before, **TOL)

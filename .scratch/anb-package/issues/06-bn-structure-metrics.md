@@ -11,9 +11,9 @@ Shared helpers stay module-level, outside the class hierarchy. `FocalBetweenness
 
 **Blocked by:** 05 (Energy metrics + legacy-state harness)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Each of the six metrics equals legacy `fill_metrics`/`get_output` to floating-point tolerance on several random legacy states, through the ticket-05 harness
-- [ ] Both triangle-balance metrics come from one shared triangle computation
-- [ ] The focal variants respect each agent's per-agent `focal` (default 0)
-- [ ] Edge cases legacy handles specially (for example all-zero edge weights) give the legacy result
+- [x] Each of the six metrics equals legacy `fill_metrics`/`get_output` to floating-point tolerance on several random legacy states, through the ticket-05 harness
+- [x] Both triangle-balance metrics come from one shared triangle computation
+- [x] The focal variants respect each agent's per-agent `focal` (default 0)
+- [x] Edge cases legacy handles specially (for example all-zero edge weights) give the legacy result

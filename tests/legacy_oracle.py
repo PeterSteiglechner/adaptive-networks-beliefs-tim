@@ -105,8 +105,29 @@ def to_context(legacy: ModuleType, agents, nb_list, t: int, params: dict):
     return StepContext(model, t, ext)
 
 
-def legacy_and_anb(legacy: ModuleType, seed: int, t: int, ext_strength: float, rho: float = 1 / 3, isolate=()):
-    """One random state on both sides: `(legacy metric columns, anb StepContext)`."""
+def legacy_and_anb(
+    legacy: ModuleType, seed: int, t: int, ext_strength: float, rho: float = 1 / 3, isolate=(), edit=None
+):
+    """One random state on both sides: `(legacy metric columns, anb StepContext)`.
+
+    `edit(agents)` may change the legacy state in place before either side sees it.
+    """
     agents, nb_list = random_legacy_state(legacy, seed, isolate=isolate)
+    if edit is not None:
+        edit(agents)
     params = legacy_params(rho=rho, ext_strength=ext_strength)
     return legacy_metrics(legacy, agents, nb_list, t, params), to_context(legacy, agents, nb_list, t, params)
+
+
+def refocus_randomly(state, rng) -> None:
+    """Give each agent a random focal k, swapping belief dimensions 0 and k so the BN itself is unchanged.
+
+    Every metric should then give the same values as before, if it follows each agent's `focal`.
+    """
+    focal = rng.integers(state.n_beliefs, size=state.n_agents)
+    for i, k in enumerate(focal):
+        perm = np.arange(state.n_beliefs)
+        perm[[0, k]] = perm[[k, 0]]
+        state.beliefs[i] = state.beliefs[i, perm]
+        state.edge_weights[i] = state.edge_weights[i][np.ix_(perm, perm)]
+    state.focal[:] = focal

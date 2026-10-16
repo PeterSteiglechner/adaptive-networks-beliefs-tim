@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from functools import cache
+from itertools import combinations
 from typing import TYPE_CHECKING
 
 import igraph as ig
@@ -52,6 +54,11 @@ def _focal_rows(state) -> np.ndarray:
     return state.edge_weights[np.arange(state.n_agents), state.focal]
 
 
+def _focal_field(state) -> np.ndarray:
+    """`(N,)`: Σ_j w_foc,j x_j, the BN's pull on each agent's focal belief (shared by Hpersfoc and expI)."""
+    return np.einsum("nj,nj->n", _focal_rows(state), state.beliefs)
+
+
 class PersonalEnergy(Metric):
     """Hpers = −½ Σ_ij w_ij x_i x_j (BN dissonance over all edges)."""
 
@@ -69,7 +76,7 @@ class FocalPersonalEnergy(Metric):
 
     def compute(self, ctx):
         state = ctx.model.state
-        return -state.focal_beliefs() * np.einsum("nj,nj->n", _focal_rows(state), state.beliefs)
+        return -state.focal_beliefs() * _focal_field(state)
 
 
 class SocialEnergy(Metric):
@@ -137,6 +144,99 @@ class NonFocalExtremity(Metric):
         state = ctx.model.state
         total = np.abs(state.beliefs).sum(axis=1)
         return (total - np.abs(state.focal_beliefs())) / (state.n_beliefs - 1)
+
+
+@cache
+def _triangles(n_beliefs: int) -> np.ndarray:
+    """`(T, 3)`: every node triple a < b < c of an `n_beliefs`-node BN."""
+    return np.array(list(combinations(range(n_beliefs), 3)), dtype=np.int64).reshape(-1, 3)
+
+
+def _balanced_triangles(edge_weights: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The one triangle pass both balance metrics share.
+
+    Returns `triangles (T, 3)`, every node triple a < b < c, and `balanced (N, T)`, true where
+    w_ab w_ac w_bc > 0. A triangle with a zero edge counts as unbalanced, as in legacy.
+    """
+    triangles = _triangles(edge_weights.shape[1])
+    a, b, c = triangles.T
+    balanced = edge_weights[:, a, b] * edge_weights[:, a, c] * edge_weights[:, b, c] > 0
+    return triangles, balanced
+
+
+class TriangleBalance(Metric):
+    """tb_tot: number of balanced triangles in the BN."""
+
+    name = "tb_tot"
+
+    def compute(self, ctx):
+        _, balanced = _balanced_triangles(ctx.model.state.edge_weights)
+        return balanced.sum(axis=1).astype(float)
+
+
+class FocalTriangleBalance(Metric):
+    """tb_foc: number of balanced triangles that contain the focal belief."""
+
+    name = "tb_foc"
+
+    def compute(self, ctx):
+        state = ctx.model.state
+        triangles, balanced = _balanced_triangles(state.edge_weights)
+        through_focal = (triangles[None, :, :] == state.focal[:, None, None]).any(axis=2)
+        return (balanced & through_focal).sum(axis=1).astype(float)
+
+
+class MeanAbsEdge(Metric):
+    """absOm_tot: mean |w| over all M(M−1)/2 BN edges."""
+
+    name = "absOm_tot"
+
+    def compute(self, ctx):
+        return np.abs(ctx.model.state.edge_vector()).mean(axis=1)
+
+
+class FocalMeanAbsEdge(Metric):
+    """absOm_foc: mean |w_foc,j| over the M − 1 edges of the focal belief."""
+
+    name = "absOm_foc"
+
+    def compute(self, ctx):
+        state = ctx.model.state
+        return np.abs(_focal_rows(state)).sum(axis=1) / (state.n_beliefs - 1)
+
+
+class WeightedClustering(Metric):
+    """clust: mean over BN nodes of the weighted clustering coefficient, as legacy computes it.
+
+    Node i gets Σ_jk (ŵ_ij ŵ_jk ŵ_ki)^(1/3) / (k_i (k_i − 1)) with ŵ = |w| / max |w| and k_i the number of
+    nonzero edges of i. Nodes with k_i < 2 are skipped. An agent with no node left (e.g. an all-zero BN) gets
+    NaN, as in legacy.
+    """
+
+    name = "clust"
+
+    def compute(self, ctx):
+        abs_w = np.abs(ctx.model.state.edge_weights)
+        w_max = abs_w.max(axis=(1, 2), keepdims=True)
+        w_cbrt = np.divide(abs_w, w_max, out=np.zeros_like(abs_w), where=w_max > 0) ** (1 / 3)
+        cycles = np.einsum("aij,ajk,aki->ai", w_cbrt, w_cbrt, w_cbrt)
+        degree = (abs_w > 0).sum(axis=2)
+        pairs = degree * (degree - 1)
+        valid = pairs > 0
+        node_clust = np.divide(cycles, pairs, out=np.zeros_like(cycles), where=valid)
+        n_valid = valid.sum(axis=1)
+        return np.divide(
+            node_clust.sum(axis=1), n_valid, out=np.full(len(node_clust), np.nan), where=n_valid > 0
+        )
+
+
+class ExpectedInfluence(Metric):
+    """expI: Σ_j w_foc,j x_j, the focal belief's edge-weighted pull from the other beliefs."""
+
+    name = "expI"
+
+    def compute(self, ctx):
+        return _focal_field(ctx.model.state)
 
 
 class MetricsRecorder:
