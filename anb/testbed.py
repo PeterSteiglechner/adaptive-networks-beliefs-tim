@@ -1,6 +1,12 @@
-"""Experiment protocol: when pressure is applied and which steps are analysed."""
+"""Experiment protocol: when pressure is applied and which steps are analysed, and the run loop."""
 
 from dataclasses import dataclass
+
+import numpy as np
+import pandas as pd
+
+from .metrics import Degree, FocalBelief, Metric, MetricsRecorder, StepContext
+from .model import ModelSpec
 
 
 class PressureSchedule:
@@ -62,3 +68,42 @@ class TestbedConfig:
         for w in self.windows().values():
             steps.update(w)
         return sorted(steps)
+
+
+@dataclass
+class SimulationResult:
+    """One run: the finished frame, the parameters (spec and schedule) and the seed."""
+
+    frame: pd.DataFrame
+    params: dict
+    seed: int
+
+
+class Testbed:
+    """Owns the experiment: seeding, the time loop, the pressure schedule and metric recording."""
+
+    __test__ = False  # not a pytest test class
+
+    def __init__(self, spec: ModelSpec, config: TestbedConfig, metrics: list[Metric] | None = None):
+        self.spec = spec
+        self.config = config
+        self.metrics = [Degree(), FocalBelief()] if metrics is None else list(metrics)
+
+    def run(self, seed: int) -> SimulationResult:
+        if not self.config.detail:
+            raise NotImplementedError("ensemble mode needs the window aggregation (ticket 08)")
+        schedule = self.config.schedule
+        rng = np.random.default_rng(seed)
+        model = self.spec.build(rng)
+        recorder = MetricsRecorder(self.metrics)
+        tracked = set(self.config.track_times())
+
+        recorder.record(StepContext(model, 0, schedule.strength_at(0)))
+        for t in range(1, self.config.T + 1):
+            ext = schedule.strength_at(t)
+            model.step(t, ext, rng)
+            if t in tracked:
+                recorder.record(StepContext(model, t, ext))
+
+        params = {**self.spec.params(), "ext_strength": schedule.strength, "n_events": schedule.n_events}
+        return SimulationResult(recorder.to_frame(), params, seed)

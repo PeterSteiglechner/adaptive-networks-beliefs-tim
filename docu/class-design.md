@@ -48,11 +48,11 @@ classDiagram
             +fixed : Optional~ndarray~bool~~[N]
             +init_state(n_agents, rng)* AgentState
             +param_arrays(n_agents) dict
-            +sweep(state, adjacency, t, ext, rng)*
+            +sweep(state, adjacency, t, ext, rng, rho)*
         }
         class ANBAgent {
             +init_state(n_agents, rng) AgentState
-            +sweep(state, adjacency, t, ext, rng)
+            +sweep(state, adjacency, t, ext, rng, rho)
         }
     }
 
@@ -319,7 +319,7 @@ pass. The helpers are not part of the class hierarchy.
 | Class | Responsibility |
 |-------|----------------|
 | `ModelSpec` | The injectable, picklable factory (Q16). `build(rng)` calls `agent.init_state` and `network_cls.build` with the same `rng` and checks that both, and every per-agent parameter, use `n_agents`. `params()` returns the parameters that become output columns and feed `legacy_filename`: scalars for uniform parameters, `(N,)` arrays for per-agent ones |
-| `ANBModel` | `step(t, ext, rng)` hands one sweep to `agent.sweep(state, network.adjacency, t, ext, rng)` (Q22). The one place where an adaptive network's update would go (Q6). Knows nothing about time windows, pressure protocols or metrics (Q5) |
+| `ANBModel` | `step(t, ext, rng)` hands one sweep to `agent.sweep(state, network.adjacency, t, ext, rng, rho)` (Q22). The one place where an adaptive network's update would go (Q6). Knows nothing about time windows, pressure protocols or metrics (Q5) |
 
 ### `anb/metrics.py`
 
@@ -368,7 +368,7 @@ sequenceDiagram
     TB->>R: record(StepContext(model, 0, 0))
     loop t = 1 … config.T()
         TB->>M: step(t, config.schedule.strength_at(t), rng)
-        M->>A: sweep(state, adjacency, t, ext, rng)
+        M->>A: sweep(state, adjacency, t, ext, rng, rho)
         Note over A: shuffle agents, then per agent:<br/>beliefs, then edges (Numba)
         opt t in config.track_times()
             TB->>R: record(StepContext(model, t, ext))

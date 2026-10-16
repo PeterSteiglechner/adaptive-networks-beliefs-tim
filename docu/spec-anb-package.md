@@ -216,7 +216,7 @@ how to plug in a new network.
   - abstract `init_state(n_agents, rng) -> AgentState`
   - concrete `param_arrays(n_agents) -> dict[str, ndarray]` broadcasts every per-agent parameter to `(N,)` for
     the kernel
-  - abstract `sweep(state, adjacency, t, ext, rng) -> None` does one whole random-sequential step and mutates
+  - abstract `sweep(state, adjacency, t, ext, rng, rho) -> None` does one whole random-sequential step and mutates
     `state` in place. This is the **only** Numba boundary: one call per time step. There are no per-agent
     Python methods.
 - **`ANBAgent(Agent)`**: the paper's rule. `sweep` delegates to one `@njit(cache=True)` kernel that takes plain
@@ -249,7 +249,7 @@ how to plug in a new network.
     `lam`, `fixedBNat100`, …). Uniform parameters are scalars and per-agent ones are `(N,)` arrays.
     `fixedBNat100` is derived from `learning_until`.
 - **`ANBModel`** (concrete, not abstract): `agent`, `network`, `state`, `rho`. `step(t, ext, rng)` calls
-  `agent.sweep(state, network.adjacency, t, ext, rng)`. It knows nothing about windows, protocols or metrics.
+  `agent.sweep(state, network.adjacency, t, ext, rng, rho)`. It knows nothing about windows, protocols or metrics.
 - Each parameter lives with its owner: β, ε, μ, λ, τ, `init_w` and `learning_until` on `Agent`; `link_prob` on
   `Network`; ρ on `ANBModel`/`ModelSpec`.
 
