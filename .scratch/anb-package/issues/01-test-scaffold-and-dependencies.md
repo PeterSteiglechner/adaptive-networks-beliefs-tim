@@ -4,10 +4,10 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `numba` (≥ 0.56), `pytest`, `scikit-learn` and `statsmodels` are installed in the `anb` conda env and listed in `pyproject.toml`, so the `uv` route still works
-- [ ] An importable `anb` package exists next to `ANBmodel.py`, and `ANBmodel.py` and the `analyse_*.py` scripts are untouched
-- [ ] A pytest configuration exists. Slow tests (statistical validation, benchmarks) are behind a marker and excluded from the default run
-- [ ] A shared test helper loads legacy with `detail`/`track_times` injected into its namespace, and a smoke test calls one legacy function through it
-- [ ] `pytest` passes with JIT on and with `NUMBA_DISABLE_JIT=1`
+- [x] `numba` (≥ 0.56), `pytest`, `scikit-learn` and `statsmodels` are installed in the `anb` conda env and listed in `pyproject.toml`, so the `uv` route still works
+- [x] An importable `anb` package exists next to `ANBmodel.py`, and `ANBmodel.py` and the `analyse_*.py` scripts are untouched
+- [x] A pytest configuration exists. Slow tests (statistical validation, benchmarks) are behind a marker and excluded from the default run
+- [x] A shared test helper loads legacy with `detail`/`track_times` injected into its namespace, and a smoke test calls one legacy function through it
+- [x] `pytest` passes with JIT on and with `NUMBA_DISABLE_JIT=1`

@@ -1,7 +1,7 @@
 # Known Issues
 
-These problems turned up while documenting `ANBmodel.py` and the analysis scripts. None of them has been
-fixed. Each entry gives the location, what goes wrong, and a suggested fix.
+These problems turned up while documenting `ANBmodel.py` and the analysis scripts. Fixed ones are marked
+as such; the rest are open. Each entry gives the location, what goes wrong, and a suggested fix.
 
 Issues are ordered by impact:
 
@@ -16,7 +16,7 @@ Issues are ordered by impact:
 | 2 | In-place shuffle of module-level lists carries state between runs | Reproducibility | `ANBmodel.py:179`, `:439` |
 | 3 | README run table doesn't match what the scripts read | Breaks the pipeline | `README.md`, analysis scripts |
 | 4 | Sensitivity analysis expects filename suffixes the model never writes | Breaks the pipeline | `ANBmodel.py:498–521`, `analyse_sensitivity.py:114–124` |
-| 5 | `scikit-learn` / `statsmodels` missing from dependencies | Breaks the pipeline | `pyproject.toml`, `analyse_BNmetrics.py:443–444` |
+| 5 | ~~`scikit-learn` / `statsmodels` missing from dependencies~~ (fixed) | Breaks the pipeline | `pyproject.toml`, `analyse_BNmetrics.py:443–444` |
 | 6 | `analyse_BNmetrics.py` saves into `figs/` before creating it | Breaks the pipeline | `analyse_BNmetrics.py:388`, `:791` |
 | 7 | `detail` / `track_times` exist only under `__main__` | Breaks the pipeline | `ANBmodel.py:331`, `:467`, `:573–584` |
 | 8 | Two `fixedBNat100` flags; the BN still adapts at t = 101 | Minor | `ANBmodel.py:24`, `:448–457` |
@@ -151,6 +151,9 @@ A better long-term fix is to pass `M`, `N` and `tau` as run parameters instead o
 ---
 
 ## 5. `scikit-learn` / `statsmodels` missing from dependencies
+
+**Status:** Fixed. Both are now in `pyproject.toml` and `uv.lock`. The `matplotlib` and `xarray` notes below
+still apply.
 
 **Category:** Breaks the pipeline
 

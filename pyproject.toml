@@ -9,9 +9,32 @@ dependencies = [
     "ipykernel>=7.4.0",
     "joblib>=1.6.0",
     "networkx>=3.7",
+    "numba>=0.68.0",
     "numpy>=2.5.3",
     "pandas>=3.0.6",
+    "scikit-learn>=1.9.1",
     "scipy>=1.18.1",
     "seaborn>=0.13.2",
+    "statsmodels>=0.15.0",
     "xarray>=2026.9.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["anb"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Slow tests (statistical validation, benchmarks) run only on demand: `pytest -m slow`.
+addopts = "--strict-markers -m 'not slow'"
+markers = [
+    "slow: statistical validation and benchmarks, excluded from the default run",
 ]
