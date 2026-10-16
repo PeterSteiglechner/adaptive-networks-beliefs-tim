@@ -190,3 +190,17 @@ the speed-up this ADR is for. Both ADRs now agree on one sweep kernel per time s
 - Action item 7: the rewiring ADR decides where rewiring runs.
 
 The validation threshold (≥ 100 seeds) is unchanged. ADR-002 now uses it too.
+
+**2026-10-16, metrics after the sweep kernel.** Once the sweep kernel is in place, it removes most of the ~84 %
+spent in `update_belief` and `update_edge_weights`. The metrics (~9 % now, about 0.4 s per run) are then likely
+the largest cost. Action item 3 still applies, with two refinements:
+
+- Action item 3: metrics stay outside the sweep kernel, but are vectorised over agents. `PersonalEnergy` and
+  `FocalPersonalEnergy` become one `einsum` on the `(N, M, M)` edge matrix, and `SocialEnergy` one product with
+  `W`, which replaces the per-agent list comprehensions in `get_energies`
+  ([ANBmodel.py:199-238](../ANBmodel.py#L199-L238)). This needs no Numba.
+- Action item 4: the benchmark also profiles the metrics separately. If they dominate, replace the per-agent
+  `igraph` call in `FocalBetweenness` ([ANBmodel.py:280-286](../ANBmodel.py#L280-L286)), which builds N graphs
+  per tracked step, with a private `@njit` Brandes helper over all agents. On M = 10 nodes it is short. This
+  revises the Cons entry that betweenness stays outside the JIT. The helper is internal to the metric, so the
+  `Metric` interface (ADR-002 Q10, Q20) does not change. Validate it against `igraph` on random edge matrices.
