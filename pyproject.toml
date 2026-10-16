@@ -31,6 +31,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["anb"]
 
+[tool.pyrefly]
+# pytest puts `tests/` on sys.path (it has no __init__.py), so test helpers like `legacy_oracle` import bare.
+search-path = [".", "tests"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Slow tests (statistical validation, benchmarks, notebook run-through) run only on demand: `pytest -m slow`.
