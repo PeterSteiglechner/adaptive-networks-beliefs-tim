@@ -239,6 +239,15 @@ class ExpectedInfluence(Metric):
         return _focal_field(ctx.model.state)
 
 
+def default_metrics() -> list[Metric]:
+    """Fresh instances of the 14 legacy metrics, in legacy's column order."""
+    return [
+        Degree(), PersonalEnergy(), FocalPersonalEnergy(), SocialEnergy(), ExternalEnergy(), TriangleBalance(),
+        FocalTriangleBalance(), MeanAbsEdge(), FocalMeanAbsEdge(), WeightedClustering(), FocalBetweenness(),
+        ExpectedInfluence(), FocalBelief(), NonFocalExtremity(),
+    ]
+
+
 RESPONSE_COLUMNS = ("persistPos", "nonpersistPos", "compliant", "resilient", "resistant", "latecompliant")
 
 

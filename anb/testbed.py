@@ -1,12 +1,14 @@
 """Experiment protocol: when pressure is applied and which steps are analysed, and the run loop."""
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 
-from .metrics import RESPONSE_COLUMNS, Degree, FocalBelief, Metric, MetricsRecorder, ResponseClassifier, StepContext
+from .io import legacy_filename, parameter_columns
+from .metrics import RESPONSE_COLUMNS, Metric, MetricsRecorder, ResponseClassifier, StepContext, default_metrics
 from .model import ModelSpec
 
 
@@ -97,11 +99,46 @@ class WindowAggregator:
 
 @dataclass
 class SimulationResult:
-    """One run: the finished frame, the parameters (spec and schedule) and the seed."""
+    """One run: the finished frame, the parameters (spec and schedule), the seed and the output mode."""
 
     frame: pd.DataFrame
     params: dict
     seed: int
+    detail: bool = False
+
+    def output_params(self) -> dict:
+        """`params` plus the seed: what the output columns and the legacy filename are built from."""
+        return {**self.params, "seed": self.seed}
+
+    def to_frame(self) -> pd.DataFrame:
+        """`frame` plus the parameter columns, as legacy `run_one` writes them.
+
+        Uniform parameters are scalar columns. Per-agent ones are `(N,)` arrays, joined on `id`.
+        """
+        params = self.output_params()
+        frame = self.frame.copy()
+        ids = frame.id.to_numpy()
+        for name in parameter_columns(params):
+            value = params[name]
+            frame[name] = value if np.ndim(value) == 0 else np.asarray(value)[ids]
+        return frame
+
+    def save(self, directory=".", legacy_names: bool = True) -> Path:
+        """Write `to_frame()` as CSV under `directory` and return the path.
+
+        With `legacy_names`, the path is legacy `run_one`'s (`simOut/…`, plus `_detailed` in detail mode), so
+        `save(".")` writes where the `analyse_*.py` scripts look. Otherwise it is `seed{seed}.csv`, so use one
+        directory per configuration.
+        """
+        if legacy_names:
+            name = legacy_filename(self.output_params(), self.detail)
+            name += "_detailed" if self.detail else ""
+        else:
+            name = f"seed{self.seed}"
+        path = Path(directory) / f"{name}.csv"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.to_frame().to_csv(path)
+        return path
 
 
 class Testbed:
@@ -119,7 +156,7 @@ class Testbed:
     ):
         self.spec = spec
         self.config = config
-        self.metrics = [Degree(), FocalBelief()] if metrics is None else list(metrics)
+        self.metrics = default_metrics() if metrics is None else list(metrics)
         self.classifier = classifier or ResponseClassifier.from_windows(config.windows())
         self.aggregator = aggregator or WindowAggregator(config.windows(), config.snapshot_times())
         if self.classifier.column not in {metric.name for metric in self.metrics}:
@@ -147,7 +184,7 @@ class Testbed:
             frame = self.aggregator.aggregate(frame, responses)
 
         params = {**self.spec.params(), "ext_strength": schedule.strength, "n_events": schedule.n_events}
-        return SimulationResult(frame, params, seed)
+        return SimulationResult(frame, params, seed, self.config.detail)
 
     def run_ensemble(self, seeds, n_jobs: int = 1) -> list[SimulationResult]:
         """`run(seed)` for each seed, in parallel with joblib. Each worker builds its own model."""

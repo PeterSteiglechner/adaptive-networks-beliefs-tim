@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from anb.agents import ANBAgent
+from anb.metrics import default_metrics
 from anb.model import ModelSpec
 from anb.networks import ErdosRenyiNetwork
 from anb.testbed import PressureSchedule, Testbed, TestbedConfig
@@ -42,7 +43,8 @@ def test_detail_frame_has_every_step_and_the_expected_columns():
     frame = result.frame
 
     dummies = ["persistPos", "nonpersistPos", "compliant", "resilient", "resistant", "latecompliant"]
-    assert list(frame.columns) == ["t", "id", "n_nbs", "x_focal"] + dummies + [str(m) for m in range(10)] + EDGE_COLS
+    metrics = [m.name for m in default_metrics()]
+    assert list(frame.columns) == ["t", "id"] + metrics + dummies + [str(m) for m in range(10)] + EDGE_COLS
     assert sorted(frame.t.unique()) == list(range(10))
     assert all(sorted(g.id) == list(range(N)) for _, g in frame.groupby("t"))
     assert result.seed == 3
