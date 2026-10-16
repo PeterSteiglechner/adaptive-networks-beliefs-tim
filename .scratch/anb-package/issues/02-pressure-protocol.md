@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 (Test scaffold and dependencies)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `strength_at` is 0 outside the events and `strength` inside them, inclusive at both bounds
 - [ ] For `single_event`: `T` = 200, windows 91–100 / 141–150 / 191–200, snapshots 0 / 100 / 200

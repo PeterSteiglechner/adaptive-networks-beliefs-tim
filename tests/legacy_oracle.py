@@ -5,7 +5,6 @@ Legacy defines `detail` and `track_times` only under `if __name__ == "__main__":
 of the module, so the file itself stays untouched.
 """
 
-import importlib.util
 from pathlib import Path
 from types import ModuleType
 
@@ -29,15 +28,21 @@ def legacy_track_times(legacy: ModuleType, detail: bool):
     )
 
 
-def load_legacy(detail: bool = False) -> ModuleType:
+def load_legacy(detail: bool = False, two_events: bool = False) -> ModuleType:
     """Return a fresh, independent copy of legacy with `detail` and `track_times` set.
 
     Each call re-executes the file, so module state that legacy mutates (e.g. the shuffled `agentids`)
-    doesn't leak between tests.
+    doesn't leak between tests. `two_events` flips legacy's module constant `two_external_events` in the
+    executed source, so the file itself stays untouched.
     """
-    spec = importlib.util.spec_from_file_location("ANBmodel_legacy", LEGACY_PATH)
-    legacy = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(legacy)
+    source = LEGACY_PATH.read_text()
+    flag = "two_external_events = False"
+    assert source.count(flag) == 1, "legacy no longer defines the two_external_events flag as expected"
+    if two_events:
+        source = source.replace(flag, "two_external_events = True")
+    legacy = ModuleType("ANBmodel_legacy")
+    legacy.__file__ = str(LEGACY_PATH)
+    exec(compile(source, str(LEGACY_PATH), "exec"), legacy.__dict__)
     legacy.detail = detail
     legacy.track_times = legacy_track_times(legacy, detail)
     return legacy
