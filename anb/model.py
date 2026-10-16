@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .agents import PER_AGENT_PARAMS, Agent, AgentState
+from .io import LEGACY_LEARNING_UNTIL
 from .networks import Network
 
 
@@ -41,11 +42,20 @@ class ModelSpec:
         return ANBModel(self.agent, network, state, self.rho)
 
     def params(self) -> dict:
-        """Output-column parameters: scalars for uniform parameters, `(N,)` arrays for per-agent ones."""
+        """Output-column parameters: scalars for uniform parameters, `(N,)` arrays for per-agent ones.
+
+        `fixedBNat100` is true only for `learning_until = 101`, the gate legacy's flag means. Any other gate
+        gets its own `learning_until` column, and a `fixed` mask a per-agent `fixed` column.
+        """
         out = dict(self.network_kwargs)
         for name in PER_AGENT_PARAMS:
             value = getattr(self.agent, name)
             out[name] = value if np.ndim(value) == 0 else np.asarray(value)
         out["rho"] = self.rho
-        out["fixedBNat100"] = self.agent.learning_until is not None
+        learning_until = self.agent.learning_until
+        out["fixedBNat100"] = learning_until == LEGACY_LEARNING_UNTIL
+        if learning_until not in (None, LEGACY_LEARNING_UNTIL):
+            out["learning_until"] = learning_until
+        if self.agent.fixed is not None:
+            out["fixed"] = np.asarray(self.agent.fixed)
         return out

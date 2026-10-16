@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cache
 from itertools import combinations
 from typing import TYPE_CHECKING
@@ -20,11 +20,13 @@ if TYPE_CHECKING:
 
 @dataclass
 class StepContext:
-    """Everything a metric may read at time `t`."""
+    """Everything a metric may read at time `t`. Metrics cache shared work in it, so build a new one after
+    changing the state."""
 
     model: ANBModel
     t: int
     ext: float
+    cache: dict = field(default_factory=dict, repr=False, compare=False)  # work shared by metrics at this step
 
 
 class Metric(ABC):
@@ -82,7 +84,7 @@ class FocalPersonalEnergy(Metric):
 class SocialEnergy(Metric):
     """Hsoc = −ρ x_foc · (neighbours' focal beliefs, A-weighted), 0 without neighbours.
 
-    `aggregate="mean"` (default) divides by the summed link weights, as legacy does. `"sum"` gives the eq. 1
+    `aggregate="mean"` (default) divides by the summed |link weights| (the degree, as in legacy, for 0/1 links). `"sum"` gives the eq. 1
     term −ρ x_foc Σ_k A_ik x_foc(k) that the dynamics use (known issue #1).
     """
 
@@ -98,7 +100,7 @@ class SocialEnergy(Metric):
         adjacency = ctx.model.network.adjacency
         social = adjacency @ x
         if self.aggregate == "mean":
-            weight = adjacency.sum(axis=1)
+            weight = np.abs(adjacency).sum(axis=1)
             social = np.divide(social, weight, out=np.zeros_like(social), where=weight != 0)
         return -ctx.model.rho * x * social
 
@@ -217,10 +219,15 @@ def _triangles(n_beliefs: int) -> np.ndarray:
     return np.array(list(combinations(range(n_beliefs), 3)), dtype=np.int64).reshape(-1, 3)
 
 
-def _balanced_triangles(edge_weights: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """The one triangle pass both balance metrics share.
+def _balanced_triangles(ctx: StepContext) -> tuple[np.ndarray, np.ndarray]:
+    """The one triangle pass both balance metrics share, computed once per `StepContext`."""
+    if "balanced_triangles" not in ctx.cache:
+        ctx.cache["balanced_triangles"] = _triangle_pass(ctx.model.state.edge_weights)
+    return ctx.cache["balanced_triangles"]
 
-    Returns `triangles (T, 3)`, every node triple a < b < c, and `balanced (N, T)`, true where
+
+def _triangle_pass(edge_weights: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Returns `triangles (T, 3)`, every node triple a < b < c, and `balanced (N, T)`, true where
     w_ab w_ac w_bc > 0. A triangle with a zero edge counts as unbalanced, as in legacy.
     """
     triangles = _triangles(edge_weights.shape[1])
@@ -235,7 +242,7 @@ class TriangleBalance(Metric):
     name = "tb_tot"
 
     def compute(self, ctx):
-        _, balanced = _balanced_triangles(ctx.model.state.edge_weights)
+        _, balanced = _balanced_triangles(ctx)
         return balanced.sum(axis=1).astype(float)
 
 
@@ -246,7 +253,7 @@ class FocalTriangleBalance(Metric):
 
     def compute(self, ctx):
         state = ctx.model.state
-        triangles, balanced = _balanced_triangles(state.edge_weights)
+        triangles, balanced = _balanced_triangles(ctx)
         through_focal = (triangles[None, :, :] == state.focal[:, None, None]).any(axis=2)
         return (balanced & through_focal).sum(axis=1).astype(float)
 

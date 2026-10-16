@@ -10,6 +10,7 @@ from anb.metrics import (
     FocalMeanAbsEdge,
     FocalTriangleBalance,
     MeanAbsEdge,
+    StepContext,
     TriangleBalance,
     WeightedClustering,
 )
@@ -107,5 +108,24 @@ def test_metrics_follow_each_agents_focal_dimension(legacy, metric):
     _, ctx = both_sides(legacy, seed=7)
     before = metric.compute(ctx)
     refocus_randomly(ctx.model.state, np.random.default_rng(0))
+    ctx = StepContext(ctx.model, ctx.t, ctx.ext)  # the state changed, so drop the cached triangle pass
 
     np.testing.assert_allclose(metric.compute(ctx), before, **TOL)
+
+
+def test_both_balance_metrics_share_one_triangle_pass(monkeypatch):
+    import anb.metrics as metrics_module
+    from anb.agents import ANBAgent
+    from anb.model import ModelSpec
+    from anb.networks import ErdosRenyiNetwork
+
+    calls = []
+    original = metrics_module._triangle_pass
+    monkeypatch.setattr(metrics_module, "_triangle_pass", lambda w: calls.append(1) or original(w))
+    model = ModelSpec(ANBAgent(), ErdosRenyiNetwork, {"link_prob": 0.1}, n_agents=5).build(np.random.default_rng(0))
+    ctx = StepContext(model, 0, 0.0)
+
+    TriangleBalance().compute(ctx)
+    FocalTriangleBalance().compute(ctx)
+
+    assert len(calls) == 1

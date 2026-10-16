@@ -305,7 +305,7 @@ pass. The helpers are not part of the class hierarchy.
 |-------|----------------|
 | `AgentState` | Holds the population's data as plain arrays: beliefs, symmetric edge matrices, the last τ belief changes and the focal dimension per agent (Q8, Q14, Q18). Has no behaviour beyond read-only views (`edge_vector()` in legacy `w{m}{n}` order, `focal_beliefs()`). `n_agents` and `n_beliefs` are properties read from the array shapes, so it does not store `M` or `N` separately |
 | `Agent` | An agent type: the update rule and its parameters (Q4, Q9). Owns `M` and the 21-point belief grid, and creates a matching `AgentState` in `init_state`. `beta`, `eps`, `mu`, `lam` and `init_w` are scalars or `(N,)` arrays, and `fixed` marks agents that never update (Q23). `param_arrays` broadcasts them to `(N,)` for the kernel. `sweep` runs one whole random-sequential step (Q22) |
-| `ANBAgent` | The paper's agent: Glauber belief updates (eq. 2) and Hebbian + social + decay edge updates (eq. 3), as one `@njit` sweep kernel (ADR-001). Per agent in shuffled order: social input ρ · Σ x_foc over the neighbours from `adjacency`, belief resampling in random order with `delta_memory`, then the edge update with the neighbours' mean edge matrix (μ = 0 without neighbours). Skips fixed agents, and skips the edge update once `t ≥ learning_until` (Q19) |
+| `ANBAgent` | The paper's agent: Glauber belief updates (eq. 2) and Hebbian + social + decay edge updates (eq. 3), as one `@njit` sweep kernel (ADR-001). Per agent in shuffled order: social input ρ · Σ x_foc over the neighbours from `adjacency`, belief resampling in random order with `delta_memory`, then the edge update with the neighbours' mean edge matrix, Σ_k A_ik W_k / Σ_k |A_ik| (μ = 0 without neighbours). Skips fixed agents, and skips the edge update once `t ≥ learning_until` (Q19) |
 
 ### `anb/networks.py`
 
@@ -318,7 +318,7 @@ pass. The helpers are not part of the class hierarchy.
 
 | Class | Responsibility |
 |-------|----------------|
-| `ModelSpec` | The injectable, picklable factory (Q16). `build(rng)` calls `agent.init_state` and `network_cls.build` with the same `rng` and checks that both, and every per-agent parameter, use `n_agents`. `params()` returns the parameters that become output columns and feed `legacy_filename`: scalars for uniform parameters, `(N,)` arrays for per-agent ones |
+| `ModelSpec` | The injectable, picklable factory (Q16). `build(rng)` calls `agent.init_state` and `network_cls.build` with the same `rng` and checks that both, and every per-agent parameter, use `n_agents`. `params()` returns the parameters that become output columns and feed `legacy_filename`: scalars for uniform parameters, `(N,)` arrays for per-agent ones. `fixedBNat100` is true only for `learning_until = 101`; any other gate adds a `learning_until` column and a `fixed` mask a per-agent `fixed` column, and neither has a legacy filename |
 | `ANBModel` | `step(t, ext, rng)` hands one sweep to `agent.sweep(state, network.adjacency, t, ext, rng, rho)` (Q22). The one place where an adaptive network's update would go (Q6). Knows nothing about time windows, pressure protocols or metrics (Q5) |
 
 ### `anb/metrics.py`

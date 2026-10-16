@@ -186,3 +186,35 @@ def test_package_runs_from_a_plain_module(tmp_path):
     )
 
     assert out.stdout.strip() == str(5 * 5)
+
+
+class SignedPairNetwork(ErdosRenyiNetwork):
+    """Agent 0 has one +1 and one −1 link, so its link weights sum to 0."""
+
+    @classmethod
+    def build(cls, n_agents, rng, link_prob):
+        adjacency = np.zeros((n_agents, n_agents))
+        adjacency[0, 1] = adjacency[1, 0] = 1.0
+        adjacency[0, 2] = adjacency[2, 0] = -1.0
+        return cls(adjacency, link_prob)
+
+
+def test_signed_links_that_sum_to_zero_keep_edges_finite():
+    spec = ModelSpec(ANBAgent(eps=1.0, mu=0.5), SignedPairNetwork, {"link_prob": 0.0}, n_agents=N)
+    rng = np.random.default_rng(0)
+    model = spec.build(rng)
+
+    for t in range(1, 6):
+        model.step(t, 0.0, rng)
+
+    assert np.isfinite(model.state.edge_weights).all()
+
+
+def test_param_arrays_are_cached_until_a_parameter_is_reassigned():
+    agent = ANBAgent(beta=2.0)
+    first = agent.param_arrays(N)
+
+    assert agent.param_arrays(N) is first
+    agent.beta = 5.0
+    assert (agent.param_arrays(N)["beta"] == 5.0).all()
+    assert agent.param_arrays(N + 1)["beta"].shape == (N + 1,)

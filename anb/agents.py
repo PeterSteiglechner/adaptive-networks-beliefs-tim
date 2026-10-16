@@ -77,13 +77,25 @@ class Agent(ABC):
         self.n_beliefs = n_beliefs
         self.belief_options = np.linspace(-1, 1, 21) if belief_options is None else np.asarray(belief_options)
 
+    def __setattr__(self, name, value):
+        if name in PER_AGENT_PARAMS or name == "fixed":
+            self.__dict__.pop("_param_cache", None)
+        super().__setattr__(name, value)
+
     def param_arrays(self, n_agents: int) -> dict[str, np.ndarray]:
-        """Every per-agent parameter broadcast to `(N,)`. Raises if an array's length isn't `n_agents`."""
+        """Every per-agent parameter broadcast to `(N,)`. Raises if an array's length isn't `n_agents`.
+
+        Cached until a parameter is reassigned, since `sweep` calls this every step. Don't modify the arrays.
+        """
+        cache = self.__dict__.get("_param_cache")
+        if cache is not None and cache[0] == n_agents:
+            return cache[1]
         out = {}
         for name in PER_AGENT_PARAMS:
             out[name] = self._broadcast(name, getattr(self, name), n_agents, float)
         fixed = np.zeros(n_agents, dtype=bool) if self.fixed is None else self.fixed
         out["fixed"] = self._broadcast("fixed", fixed, n_agents, bool)
+        self._param_cache = (n_agents, out)
         return out
 
     @staticmethod
@@ -134,7 +146,8 @@ def _sweep(beliefs, edges, memory, focal, adjacency, options, beta, eps, mu, lam
     """The sweep kernel on plain arrays. With `NUMBA_DISABLE_JIT=1` it runs as plain Python.
 
     Agents update in shuffled order and see neighbours already updated in this step. The social input is
-    ρ · Σ_k A_ik x_foc(k); the social edge term uses the A-weighted mean of the neighbours' edge matrices.
+    ρ · Σ_k A_ik x_foc(k); the social edge term uses Σ_k A_ik W_k / Σ_k |A_ik|, the neighbours' A-weighted mean
+    edge matrix (dividing by |A| keeps it finite for signed weights that sum to 0).
     Each belief is resampled from its Glauber probabilities over `options` by inverse CDF.
     """
     n_agents, m = beliefs.shape
@@ -155,7 +168,7 @@ def _sweep(beliefs, edges, memory, focal, adjacency, options, beta, eps, mu, lam
             a = adjacency[i, k]
             if a != 0.0:
                 social += a * beliefs[k, focal[k]]
-                weight_sum += a
+                weight_sum += abs(a)
                 n_nbs += 1
 
         for d in range(m):

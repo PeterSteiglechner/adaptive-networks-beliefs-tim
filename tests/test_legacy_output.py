@@ -88,6 +88,8 @@ def test_homogeneous_parameter_columns_equal_legacy_and_concatenate_cleanly(deta
     _, expected = legacy_csv(tmp_path, monkeypatch, combo, 4, 7, detail)
     got = pd.read_csv(anb_result(combo, 4, 7, detail).save(tmp_path / "anb"))
 
+    for name in ["t", "id"]:
+        assert got[name].dtype == expected[name].dtype, name
     for name in LEGACY_PARAMS:
         assert got[name].dtype == expected[name].dtype, name
         assert got[name].unique().tolist() == expected[name].unique().tolist(), name
@@ -101,7 +103,7 @@ def test_per_agent_beta_becomes_a_per_agent_column(detail):
     betas = np.linspace(1.0, 4.0, N)
     frame = anb_result(COMBOS[0], 2, 3, detail, beta=betas).to_frame()
 
-    np.testing.assert_array_equal(frame.beta.to_numpy(), betas[frame.id.to_numpy()])
+    np.testing.assert_array_equal(frame.beta.to_numpy(), betas[frame.id.to_numpy(dtype=int)])
     assert list(frame.columns)[-len(LEGACY_PARAMS):] == LEGACY_PARAMS
 
 
@@ -112,7 +114,7 @@ def test_scalar_lam_stays_in_the_filename_and_per_agent_lam_becomes_a_column(tmp
     assert "lam" not in scalar.to_frame()
     assert scalar.save(tmp_path).name.endswith("_lambda0.0500.csv")
     frame = per_agent.to_frame()
-    np.testing.assert_array_equal(frame.lam.to_numpy(), np.linspace(0, 0.1, N)[frame.id.to_numpy()])
+    np.testing.assert_array_equal(frame.lam.to_numpy(), np.linspace(0, 0.1, N)[frame.id.to_numpy(dtype=int)])
 
 
 def test_fixedBNat100_column_follows_learning_until():
@@ -138,3 +140,38 @@ def test_to_frame_leaves_the_result_frame_untouched():
     assert result.frame.equals(before)
     assert not set(LEGACY_PARAMS) & set(result.frame.columns)
     assert list(result.frame.columns)[-len(RESPONSE_COLUMNS):] == list(RESPONSE_COLUMNS)
+
+
+def test_float_pressure_gets_the_same_filename_as_the_int_one(tmp_path):
+    assert anb_result(COMBOS[0], 4.0, 3, False).save(tmp_path).name \
+        == anb_result(COMBOS[0], 4, 3, False).save(tmp_path).name
+
+
+@pytest.mark.parametrize("learning_until", [50, 102])
+def test_other_learning_until_is_its_own_column_and_has_no_legacy_name(learning_until, tmp_path):
+    result = anb_result(COMBOS[0], 2, 3, False, learning_until=learning_until)
+    frame = result.to_frame()
+
+    assert frame.fixedBNat100.eq(False).all()
+    assert frame.learning_until.eq(learning_until).all()
+    with pytest.raises(ValueError, match="learning_until.*legacy_names=False"):
+        result.save(tmp_path)
+
+
+def test_fixed_mask_becomes_a_per_agent_column(tmp_path):
+    fixed = np.arange(N) < 2
+    result = anb_result(COMBOS[0], 2, 3, False, fixed=fixed)
+    frame = result.to_frame()
+
+    np.testing.assert_array_equal(frame.fixed.to_numpy(), fixed[frame.id.to_numpy(dtype=int)])
+    with pytest.raises(ValueError, match="fixed"):
+        result.save(tmp_path)
+
+
+def test_legacy_names_fail_clearly_for_other_networks(tmp_path):
+    result = anb_result(COMBOS[0], 2, 3, False)
+    result.params = {k: v for k, v in result.params.items() if k != "link_prob"} | {"k": 5}
+
+    with pytest.raises(ValueError, match="link_prob.*k.*legacy_names=False"):
+        result.save(tmp_path)
+    assert result.save(tmp_path, legacy_names=False).exists()

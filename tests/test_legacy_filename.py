@@ -79,3 +79,21 @@ def test_detail_selects_directory():
 def test_does_not_add_M_N_tau_suffixes():
     name = legacy_filename(params_for(BN_CONFIGS[3], 4, 1), False)
     assert not any(s in name for s in ("_M", "_N", "_tau"))
+
+
+def test_integral_float_pressure_and_seed_are_written_like_ints():
+    assert legacy_filename(params_for(BN_CONFIGS[3], 4.0, 1.0), False) \
+        == legacy_filename(params_for(BN_CONFIGS[3], 4, 1), False)
+
+
+def test_fractional_pressure_stays_unformatted():
+    assert "_ext_strength2.5_" in legacy_filename(params_for(BN_CONFIGS[3], 2.5, 1), False)
+
+
+def test_missing_and_extra_keys_raise_value_error():
+    params = params_for(BN_CONFIGS[3], 4, 1)
+    del params["link_prob"]
+    with pytest.raises(ValueError, match="missing: link_prob"):
+        legacy_filename(params, False)
+    with pytest.raises(ValueError, match="no legacy token for: learning_until"):
+        legacy_filename(params_for(BN_CONFIGS[3], 4, 1) | {"learning_until": 102}, False)

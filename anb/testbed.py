@@ -113,7 +113,8 @@ class SimulationResult:
     def to_frame(self) -> pd.DataFrame:
         """`frame` plus the parameter columns, as legacy `run_one` writes them.
 
-        Uniform parameters are scalar columns. Per-agent ones are `(N,)` arrays, joined on `id`.
+        Uniform parameters are scalar columns. Per-agent ones are `(N,)` arrays, joined on `id`. `t` and `id`
+        are floats, as in legacy's CSVs (its state array is all float), so old and new frames merge on `id`.
         """
         params = self.output_params()
         frame = self.frame.copy()
@@ -121,7 +122,7 @@ class SimulationResult:
         for name in parameter_columns(params):
             value = params[name]
             frame[name] = value if np.ndim(value) == 0 else np.asarray(value)[ids]
-        return frame
+        return frame.astype({"t": float, "id": float})
 
     def save(self, directory=".", legacy_names: bool = True) -> Path:
         """Write `to_frame()` as CSV under `directory` and return the path.

@@ -123,7 +123,9 @@ and the metrics come to 36 ms, 28 % of the run in the ensemble. The rest of the 
    - `bc_foc` of adaptive→static under strong pressure is lower by about 0.2 (pattern 1 above). Other metrics
      show no detectable difference.
    - λ = 0 in every paper run, so skipping the decay has no effect there.
-   - To reproduce legacy's timing exactly, use `learning_until = 102`.
+   - To reproduce legacy's timing exactly, use `learning_until = 102`. Such runs get `fixedBNat100 = False`
+     plus a `learning_until` column, and have no legacy filename (save them with `legacy_names=False`), so
+     they can't overwrite or be mistaken for paper runs.
 
 Unchanged on purpose, for comparability with the paper: `Hsoc` keeps the neighbours' mean (`SocialEnergy("sum")`
 gives the eq. 1 term, known issue #1), the response rules keep their zero and boundary handling (#9), and file
