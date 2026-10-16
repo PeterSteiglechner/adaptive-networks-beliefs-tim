@@ -42,7 +42,7 @@ Tests that compare against legacy load `ANBmodel.py` through `tests/legacy_oracl
 ## Architecture
 
 **Two halves joined only by filenames.** `ANBmodel.py` writes one CSV per (param combo × pressure × seed) into
-`simOut/` (ensemble mode) or `simOut/detailed/` (`detail=True`). Both are git-ignored. The five
+`simOut_old_model` (ensemble mode) or `simOut_old_model` (`detail=True`). Both are git-ignored. The five
 `analyse_*.py` scripts import nothing from the model. They `pd.read_csv` exact filenames built the same way
 as `run_one` builds them, so if you change how `run_one` formats a filename (`f"{k}{v:.2f}"`, `mu` with `.3f`,
 `seed`/`ext_strength` unformatted, the bare `fixedBNat100` token) the analysis scripts break.
@@ -79,7 +79,7 @@ you change the package:
   analysis scripts keep working.
 - Validate against legacy statistically (≥100 seeds per config), not bit for bit:
   `pytest -m slow -s tests/test_statistical_validation.py` (~25 min). It caches run summaries in
-  `simOut/validation/runs/`, so delete that folder after changing the model.
+  `simOut_old_model`, so delete that folder after changing the model.
 
 ## Known pitfalls
 

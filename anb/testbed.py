@@ -127,7 +127,7 @@ class SimulationResult:
     def save(self, directory=".", legacy_names: bool = True) -> Path:
         """Write `to_frame()` as CSV under `directory` and return the path.
 
-        With `legacy_names`, the path is legacy `run_one`'s (`simOut/…`, plus `_detailed` in detail mode), so
+        With `legacy_names`, the path is legacy `run_one`'s (`simOut_old_model/…`, plus `_detailed` in detail mode), so
         `save(".")` writes where the `analyse_*.py` scripts look. Otherwise it is `seed{seed}.csv`, so use one
         directory per configuration.
         """

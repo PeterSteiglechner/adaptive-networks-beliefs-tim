@@ -203,7 +203,7 @@ def metric_table(legacy: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
 # Report
 
 
-def validate(seeds=range(100), out_dir=Path("simOut/validation"), n_jobs: int = -1, seed: int = 0):
+def validate(seeds=range(100), out_dir=Path("simOut_old_model/validation"), n_jobs: int = -1, seed: int = 0):
     """Run (or load) both implementations, compare them, and write `responses.csv`, `metrics.csv` and
     `report.md` into `out_dir`. Returns `(responses, metrics)` tables with `q` and `fail` columns."""
     out_dir = Path(out_dir)
@@ -259,7 +259,7 @@ def report(responses: pd.DataFrame, metrics: pd.DataFrame, n_seeds: int) -> str:
 # Follow-ups to patterns in the report (docu/validation.md, "Patterns looked at")
 
 
-def gate_check(pressure: float, learning_until: int, cache_dir=Path("simOut/validation/runs"), seeds=range(100),
+def gate_check(pressure: float, learning_until: int, cache_dir=Path("simOut_old_model/validation/runs"), seeds=range(100),
                n_jobs: int = -1) -> dict:
     """`bc_foc` (during window) of adaptive→static: cached legacy runs versus `anb` with `learning_until`.
 

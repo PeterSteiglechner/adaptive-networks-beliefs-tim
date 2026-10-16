@@ -10,8 +10,8 @@ uv sync
 uv run ANBmodel.py
 ```
 
-Simulations run in parallel on `cpu_count() - 1` cores via `joblib`. The output goes to `simOut/`
-(ensemble mode) or `simOut/detailed/` (detailed mode). Both are git-ignored.
+Simulations run in parallel on `cpu_count() - 1` cores via `joblib`. The output goes to `../simOut_old_model`
+(ensemble mode) or `../simOut_old_model` (detailed mode). Both are git-ignored.
 
 > **Missing dependencies for the analysis scripts.** `analyse_BNmetrics.py` imports `scikit-learn`
 > and `statsmodels`, which are not in `pyproject.toml`. Add them before running that script:

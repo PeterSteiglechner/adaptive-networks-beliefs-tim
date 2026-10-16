@@ -478,7 +478,7 @@ def run_one(seed, link_prob, init_w, beta, rho, eps, mu, fixedBNat100, ext_stren
     #     f"{time.gmtime().tm_year}-{time.gmtime().tm_mon:02d}-{time.gmtime().tm_mday:02d}"
     #     + "_simOut/"
     # )
-    results_folder = "simOut/"
+    results_folder = "simOut_old_model/"
     if not os.path.isdir(results_folder):
         os.mkdir(results_folder)
     if detail and not os.path.isdir(results_folder + "detailed/"):

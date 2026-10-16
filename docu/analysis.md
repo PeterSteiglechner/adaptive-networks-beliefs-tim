@@ -1,6 +1,6 @@
 # Analysis Scripts
 
-The five `analyse_*.py` scripts read the simulation CSVs in `simOut/` and produce the paper's figures
+The five `analyse_*.py` scripts read the simulation CSVs in `../simOut_old_model` and produce the paper's figures
 and tables in `figs/`. Each script is organised into `# %%` cells, so it can be run as a whole
 (`uv run analyse_X.py`) or cell by cell in VS Code or Jupyter.
 
@@ -52,7 +52,7 @@ Run the scripts in the order of the README. `analyse_BNmetrics.py` saves Fig. 5 
 ## 1. `analyse_timeseries.py`: Figure 2
 
 **Input:** one detailed run: adaptive BN, $s=4$, `seed = 2`
-(`simOut/detailed/sim_link_prob0.10_init_w0.20_beta3.00_rho0.33_eps1.00_mu0.000_ext_strength4_seed2_detailed.csv`).
+(`../simOut_old_model`).
 You change the configuration through the variables `init_w, eps, mu, fixedBNat100, seed, s` at the top.
 
 **What it does**

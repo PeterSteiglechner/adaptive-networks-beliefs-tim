@@ -62,7 +62,7 @@ def legacy_filename(params: dict, detail: bool) -> str:
             parts.append(k if v else "")
         else:
             parts.append(f"{k}{v:.2f}")
-    name = "simOut/" + ("detailed/" if detail else "") + "sim_" + "_".join(parts)
+    name = "simOut_old_model/" + ("detailed/" if detail else "") + "sim_" + "_".join(parts)
     name = name.replace("__", "_")
     if params["n_events"] == 2:
         name += "_2events"

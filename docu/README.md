@@ -63,7 +63,7 @@ from anb.testbed import PressureSchedule, Testbed, TestbedConfig
 spec = ModelSpec(ANBAgent(beta=3.0, eps=1.0, mu=0.0, init_w=0.2), ErdosRenyiNetwork, {"link_prob": 0.1})
 testbed = Testbed(spec, TestbedConfig(PressureSchedule.single_event(4)))
 for result in testbed.run_ensemble(range(100), n_jobs=-1):
-    result.save(".")                # simOut/sim_link_prob0.10_..._seed{n}.csv
+    result.save(".")                # simOut_old_model/sim_link_prob0.10_..._seed{n}.csv
 ```
 
 The adaptive→static configuration is `ANBAgent(..., learning_until=101)`. Until the supervisor signs off on the

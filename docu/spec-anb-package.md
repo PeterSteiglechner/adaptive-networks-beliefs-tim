@@ -326,8 +326,8 @@ how to plug in a new network.
 
 - **`legacy_filename(params, detail) -> str`** reproduces `run_one`'s naming exactly. It reads `lam` and
   `n_events` from `params` rather than taking them as separate arguments. It doesn't add the `_M`/`_N`/`_tau`
-  suffixes, because `run_one` doesn't either (known issue #4 stays open). It targets `simOut/` or
-  `simOut/detailed/` according to `detail`.
+  suffixes, because `run_one` doesn't either (known issue #4 stays open). It targets `../simOut_old_model` or
+  `../simOut_old_model` according to `detail`.
 
 ### Randomness
 

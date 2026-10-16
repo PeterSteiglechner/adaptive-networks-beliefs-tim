@@ -209,7 +209,7 @@ simOut/sim_link_prob{p:.2f}_init_w{w0:.2f}_beta{β:.2f}_rho{ρ:.2f}_eps{ε:.2f}_
 simOut/detailed/sim_..._detailed.csv          # if detail=True
 ```
 
-e.g. `simOut/sim_link_prob0.10_init_w0.20_beta3.00_rho0.33_eps1.00_mu0.000_ext_strength4_seed7.csv`.
+e.g. `../simOut_old_model`.
 
 **Ensemble mode (`detail = False`)**: a compact CSV with `n_agents` rows per stored time `t`:
 

@@ -72,8 +72,8 @@ def test_two_event_variant(detail, tmp_path, monkeypatch):
 
 def test_detail_selects_directory():
     p = params_for(BN_CONFIGS[3], 4, 1)
-    assert legacy_filename(p, False).startswith("simOut/sim_")
-    assert legacy_filename(p, True).startswith("simOut/detailed/sim_")
+    assert legacy_filename(p, False).startswith("simOut_old_model/sim_")
+    assert legacy_filename(p, True).startswith("simOut_old_model/detailed/sim_")
 
 
 def test_does_not_add_M_N_tau_suffixes():

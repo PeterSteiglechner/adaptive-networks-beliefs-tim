@@ -1,8 +1,8 @@
 """On-demand statistical validation, new versus legacy (seam 1): 4 configurations × 6 pressures × 100 seeds.
 
 Takes about 25 min on 12 cores (almost all of it legacy). Run with `pytest -m slow -s tests/test_statistical_validation.py`.
-The report and the per-test tables go to `simOut/validation/` (`report.md`, `responses.csv`, `metrics.csv`);
-run summaries are cached under `simOut/validation/runs/`, so delete that folder after changing the model.
+The report and the per-test tables go to `simOut_old_model/validation/` (`report.md`, `responses.csv`, `metrics.csv`);
+run summaries are cached under `simOut_old_model/validation/runs/`, so delete that folder after changing the model.
 """
 
 from pathlib import Path
@@ -13,7 +13,7 @@ from validation import validate
 
 pytestmark = pytest.mark.slow
 
-OUT = Path(__file__).resolve().parent.parent / "simOut" / "validation"
+OUT = Path(__file__).resolve().parent.parent / "simOut_old_model" / "validation"
 
 
 def test_new_package_matches_legacy_statistically():

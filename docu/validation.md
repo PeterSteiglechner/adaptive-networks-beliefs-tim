@@ -14,8 +14,8 @@ pytest -m slow -s tests/test_statistical_validation.py   # ~25 min on 12 cores, 
 pytest -m slow -s tests/test_benchmark.py                # ~3 min
 ```
 
-The validation writes `report.md`, `responses.csv` and `metrics.csv` to `simOut/validation/` (git-ignored). It
-caches one summary row per run in `simOut/validation/runs/`. A rerun only adds missing cells, so **delete that
+The validation writes `report.md`, `responses.csv` and `metrics.csv` to `../simOut_old_model` (git-ignored). It
+caches one summary row per run in `../simOut_old_model`. A rerun only adds missing cells, so **delete that
 folder after changing the model**. The code is in `tests/validation.py`, and its statistics are tested in
 `tests/test_validation_stats.py`.
 
@@ -52,7 +52,7 @@ Response shares (legacy → anb, share of all agents), for the configurations in
 | adaptive→static | 0.101 → 0.095 | 0.300 → 0.284 | 0.107 → 0.104 |
 | adaptive | 0.137 → 0.133 | 0.228 → 0.210 | 0.143 → 0.139 |
 
-The full tables for every cell and every metric test are in `simOut/validation/report.md`.
+The full tables for every cell and every metric test are in `../simOut_old_model`.
 
 ### Patterns looked at (not failures)
 
