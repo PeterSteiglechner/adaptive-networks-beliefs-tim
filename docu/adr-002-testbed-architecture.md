@@ -232,12 +232,14 @@ subclass inline and runs it through the same testbed.
 1. [x] Write `docu/class-design.md`: a Mermaid `classDiagram` with one namespace per module, built from the
    inventory above, and one short responsibility note per class.
 2. [x] Resolve the three open points above in that doc.
-3. [ ] Scaffold `anb/` with the ABCs and the `ANBAgent`, `ErdosRenyiNetwork`, `ANBModel`, `ModelSpec` and
+3. [x] Scaffold `anb/` with the ABCs and the `ANBAgent`, `ErdosRenyiNetwork`, `ANBModel`, `ModelSpec` and
    `Testbed` implementations. Write `ANBAgent.sweep` as plain Python first, then add `@njit` (ADR-001 item 2).
-4. [ ] Port the 14 metrics and the response classifier, and check them against `fill_metrics` and `get_output`
+4. [x] Port the 14 metrics and the response classifier, and check them against `fill_metrics` and `get_output`
    on a fixed legacy state.
-5. [ ] Validate statistically against `ANBmodel.py` (the 4 paper configurations × 6 pressures, ≥ 100 seeds,
-   Q25): response frequencies and BN metric distributions. This is also ADR-001 item 5.
-6. [ ] Write `notebooks/testbed.ipynb` (Q13).
+5. [x] Validate statistically against `ANBmodel.py` (the 4 paper configurations × 6 pressures, ≥ 100 seeds,
+   Q25): response frequencies and BN metric distributions. This is also ADR-001 item 5. Passed on 2026-10-16,
+   see [validation.md](validation.md).
+6. [x] Write `notebooks/testbed.ipynb` (Q13).
 7. [x] Add the ADR and the class design doc to [docu/README.md](README.md).
-8. [ ] Get the supervisor's sign-off on the RNG change (Q7, Q17, ADR-001).
+8. [ ] Get the supervisor's sign-off on the RNG change (Q7, Q17, ADR-001) and the single `fixedBNat100` meaning
+   (Q19). Both are written up for it in [validation.md](validation.md#deliberate-differences-from-legacy-for-sign-off).

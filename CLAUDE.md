@@ -63,18 +63,23 @@ step, and beliefs within an agent are resampled one at a time (Glauber over 21 g
 output keeps only the tracked steps plus averaged rows at t = 95.5/145.5/195.5. The response classification
 (compliant/resilient/resistant…) is stored only on the 95.5 row.
 
-**Planned `anb/` package (designed, not yet implemented).** `docu/adr-002-testbed-architecture.md` and
-`docu/class-design.md` specify a refactor into `anb/` (`agents.py`, `networks.py`, `model.py`, `metrics.py`,
-`testbed.py`, `io.py`) plus `notebooks/testbed.ipynb`, with Numba sweep kernels per `docu/adr-001-numba-over-gpu.md`.
-These decisions are binding when you implement it:
+**The `anb/` package (implemented).** `docu/spec-anb-package.md`, `docu/adr-002-testbed-architecture.md` and
+`docu/class-design.md` specify the refactor into `anb/` (`agents.py`, `networks.py`, `model.py`, `metrics.py`,
+`testbed.py`, `io.py`) plus `notebooks/testbed.ipynb`. The sweep is one Numba kernel per time step
+(`docu/adr-001-numba-over-gpu.md`), and so is `FocalBetweenness` (a Brandes helper). The validation against
+legacy and the benchmark are in `docu/validation.md`. That file also lists the deliberate differences from
+legacy, which still need supervisor sign-off before new runs go into results. These decisions are binding when
+you change the package:
 - `ANBmodel.py` stays **frozen** as the reference model. Don't modify it to add features.
 - `AgentState` dataclass holds arrays (edge weights as symmetric `(N, M, M)`). `Agent` ABC holds the rule and
   parameters. Per-agent params may be scalar or `(N,)`. One `Agent.sweep(...)` call per time step is the
-  Numba boundary.
+  dynamics' Numba boundary. Metrics stay plain Python, except `FocalBetweenness`'s private `@njit` helper.
 - No global RNG: one `np.random.default_rng(seed)` per run, passed explicitly everywhere.
 - Output must be a drop-in replacement (same columns as legacy, plus a `legacy_filename` helper) so the
   analysis scripts keep working.
-- Validate against legacy statistically (≥100 seeds per config), not bit for bit.
+- Validate against legacy statistically (≥100 seeds per config), not bit for bit:
+  `pytest -m slow -s tests/test_statistical_validation.py` (~25 min). It caches run summaries in
+  `simOut/validation/runs/`, so delete that folder after changing the model.
 
 ## Known pitfalls
 

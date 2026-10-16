@@ -14,7 +14,9 @@ Code documentation for the ANB model and its analysis pipeline. The theory and r
 | [analysis.md](analysis.md) | What each `analyse_*.py` script computes and which paper figure or table it produces |
 | [adr-001-numba-over-gpu.md](adr-001-numba-over-gpu.md) | Design decision: speed up the simulation with Numba on the CPU instead of a GPU |
 | [adr-002-testbed-architecture.md](adr-002-testbed-architecture.md) | Design decision: refactor into an `anb/` package with Agent/Network ABCs, an injectable model and a testbed |
-| [class-design.md](class-design.md) | Mermaid class diagrams of the planned `anb/` package (one namespace per module), responsibilities of each class, and the resolution of ADR-002's open points |
+| [class-design.md](class-design.md) | Mermaid class diagrams of the `anb/` package (one namespace per module), responsibilities of each class, and the resolution of ADR-002's open points |
+| [spec-anb-package.md](spec-anb-package.md) | The buildable spec the `anb/` package was implemented from: user stories, module decisions, test seams |
+| [validation.md](validation.md) | Statistical validation of `anb` against `ANBmodel.py`, the benchmark, and the deliberate differences awaiting supervisor sign-off |
 
 ## The model in one paragraph
 
@@ -43,11 +45,29 @@ After a warm-up phase ($t=0$–$100$), a temporary **external pressure** $s$ pus
 ## Quick start
 
 ```bash
-uv sync
-uv add scikit-learn statsmodels   # needed by analyse_BNmetrics.py
-uv run ANBmodel.py                # configure runs first, see running-simulations.md
-uv run analyse_timeseries.py      # then the other analysis scripts, see analysis.md
+conda activate anb                # or `uv sync` and prefix the commands with `uv run`
+python ANBmodel.py                # the frozen reference model; configure runs first, see running-simulations.md
+python analyse_timeseries.py      # then the other analysis scripts, see analysis.md
 ```
+
+New runs should use the `anb/` package, which is about 46× faster and is configured from Python instead of by
+editing source. `notebooks/testbed.ipynb` walks through it. A run saved with `save(".")` lands under the legacy
+filename, so the analysis scripts read it unchanged:
+
+```python
+from anb.agents import ANBAgent
+from anb.model import ModelSpec
+from anb.networks import ErdosRenyiNetwork
+from anb.testbed import PressureSchedule, Testbed, TestbedConfig
+
+spec = ModelSpec(ANBAgent(beta=3.0, eps=1.0, mu=0.0, init_w=0.2), ErdosRenyiNetwork, {"link_prob": 0.1})
+testbed = Testbed(spec, TestbedConfig(PressureSchedule.single_event(4)))
+for result in testbed.run_ensemble(range(100), n_jobs=-1):
+    result.save(".")                # simOut/sim_link_prob0.10_..._seed{n}.csv
+```
+
+The adaptive→static configuration is `ANBAgent(..., learning_until=101)`. Until the supervisor signs off on the
+differences in [validation.md](validation.md), keep paper results on `ANBmodel.py`.
 
 ## Code ↔ paper notation
 

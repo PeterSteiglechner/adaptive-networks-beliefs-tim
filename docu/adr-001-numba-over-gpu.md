@@ -161,22 +161,23 @@ at N ≤ 1,000.
 
 ## Action Items
 
-1. [ ] Restructure state into plain arrays: beliefs `(N, M)`, BN weights `(N, M, M)` symmetric (ADR-002 Q18),
+1. [x] Restructure state into plain arrays: beliefs `(N, M)`, BN weights `(N, M, M)` symmetric (ADR-002 Q18),
    social network `W` `(N, N)` dense and weighted, past belief changes `(N, τ, M)`. Keep metrics out of the state
    array.
 2. [x] Write the sweep kernel as an `@njit(cache=True)` function with explicit parameter arrays and a seeded
    `np.random.Generator`, keeping the random-sequential agent and belief order. It is `ANBAgent.sweep` in ADR-002
    (Q22). Represent the current static network as a fixed 0/1 `W`. Check that the installed Numba version
    accepts a `Generator` argument (supported since Numba 0.56).
-3. [ ] Keep `fill_metrics` and `get_output` in plain Python, called only at `track_times`.
-4. [ ] Benchmark against the current model (same parameters, one run, and the full 240-run ensemble). One run is
-   done (`pytest -m slow -s tests/test_benchmark.py`): on 2026-10-16 the update loop took 3.2 s in legacy and
-   0.05 s in `anb` (62×), the metrics 0.32 s and 0.06 s, and the first sweep compiles in about 3 s once, then
-   loads from the disk cache in about 0.1 s. The 240-run ensemble is still open.
-5. [ ] Validate statistically: compare response frequencies (compliant / resilient / resistant) and BN metrics
+3. [x] Keep `fill_metrics` and `get_output` in plain Python, called only at `track_times`.
+4. [x] Benchmark against the current model (same parameters, one run, and the full 240-run ensemble), with
+   `pytest -m slow -s tests/test_benchmark.py`. On 2026-10-16 the update loop took 3.2 s in legacy and
+   0.05 s in `anb` (62×), and the 240-run ensemble took 151 s and 3.3 s of wall time (46×). The metrics
+   dominated after the kernel, so `FocalBetweenness` got the `@njit` Brandes helper (amendment 2026-10-16).
+   Numbers in [validation.md](validation.md#benchmark).
+5. [x] Validate statistically: compare response frequencies (compliant / resilient / resistant) and BN metrics
    between old and new models over ≥ 100 seeds per configuration. This is the same validation as ADR-002 action
-   item 5, run once.
-6. [ ] Add `numba` to the `anb` environment and to `pyproject.toml`.
+   item 5, run once. Passed on 2026-10-16, see [validation.md](validation.md).
+6. [x] Add `numba` to the `anb` environment and to `pyproject.toml`.
 7. [ ] Implement the adaptive social network on top of `W` (separate ADR for the rewiring rules). That ADR also
    decides whether ties are revised once per step, in a kernel between sweeps (`AdaptiveNetwork.update`), or
    during an agent's own update, inside the sweep kernel.

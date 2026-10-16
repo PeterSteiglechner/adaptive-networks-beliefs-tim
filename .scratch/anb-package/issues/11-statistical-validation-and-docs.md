@@ -11,11 +11,11 @@ See the spec `docu/spec-anb-package.md`, "Testing Decisions" seam 1 and "Further
 
 **Blocked by:** 10 (Numba sweep kernel)
 
-**Status:** ready-for-agent
+**Status:** done (2026-10-16). Results in `docu/validation.md`; supervisor sign-off still open
 
-- [ ] The validation script/test runs on demand and produces a report: per-cell test statistics, corrected p-values and a list of failures
-- [ ] Validation results are summarised in `docu/`, with any significant deviations explained or turned into a follow-up ticket
-- [ ] The 240-run benchmark is reported new vs legacy, with metric time shown separately
-- [ ] If the Brandes swap is made, it matches igraph on random edge matrices and the `Metric` interface is unchanged. If it isn't made, the profiling numbers that justify skipping it are recorded
-- [ ] The deliberate differences from legacy are documented for supervisor sign-off
-- [ ] The README, CLAUDE.md and ADR checkboxes reflect the implemented package
+- [x] The validation script/test runs on demand and produces a report: per-cell test statistics, corrected p-values and a list of failures
+- [x] Validation results are summarised in `docu/`, with any significant deviations explained or turned into a follow-up ticket
+- [x] The 240-run benchmark is reported new vs legacy, with metric time shown separately
+- [x] If the Brandes swap is made, it matches igraph on random edge matrices and the `Metric` interface is unchanged. If it isn't made, the profiling numbers that justify skipping it are recorded
+- [x] The deliberate differences from legacy are documented for supervisor sign-off
+- [x] The README, CLAUDE.md and ADR checkboxes reflect the implemented package

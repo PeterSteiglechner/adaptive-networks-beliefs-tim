@@ -8,9 +8,9 @@ from functools import cache
 from itertools import combinations
 from typing import TYPE_CHECKING
 
-import igraph as ig
 import numpy as np
 import pandas as pd
+from numba import njit
 
 from .agents import edge_columns
 
@@ -113,10 +113,11 @@ class ExternalEnergy(Metric):
 
 
 class FocalBetweenness(Metric):
-    """bc_foc: igraph betweenness of the focal belief in the agent's own (complete) belief network.
+    """bc_foc: betweenness of the focal belief in the agent's own (complete) belief network, as igraph gives it.
 
     Edge lengths follow legacy: 1 / (|w| + 1e-6), and 1e9 for an edge with w = 0 (kept in the graph, so all
-    M(M−1)/2 edges always exist). Unnormalised, undirected.
+    M(M−1)/2 edges always exist). Unnormalised, undirected. Computed by a Numba Brandes pass over all agents
+    instead of one igraph graph per agent; path lengths tie within igraph's relative tolerance.
     """
 
     name = "bc_foc"
@@ -125,14 +126,78 @@ class FocalBetweenness(Metric):
 
     def compute(self, ctx):
         state = ctx.model.state
-        rows, cols = np.triu_indices(state.n_beliefs, k=1)
-        abs_w = np.abs(state.edge_weights[:, rows, cols])  # (N, E)
+        abs_w = np.abs(state.edge_weights)
         lengths = np.where(abs_w > 0, 1.0 / (abs_w + self.LENGTH_EPS), self.ZERO_EDGE_LENGTH)
-        graph = ig.Graph(n=state.n_beliefs, edges=list(zip(rows.tolist(), cols.tolist())), directed=False)
-        return np.array([
-            graph.betweenness(vertices=int(f), weights=row.tolist(), directed=False)
-            for f, row in zip(state.focal, lengths)
-        ])
+        return _focal_betweenness(lengths, state.focal)
+
+
+_PATH_TIE_EPS = 1e-10  # igraph's IGRAPH_SHORTEST_PATH_EPSILON: path lengths this close (relatively) are equal
+
+
+@njit(cache=True)
+def _compare_lengths(a, b):
+    """−1, 0 or 1 as `a` is shorter than, tied with or longer than `b` (igraph's `igraph_cmp_epsilon`)."""
+    if a == b:
+        return 0
+    if abs(a - b) < _PATH_TIE_EPS * (abs(a) + abs(b)):
+        return 0
+    return -1 if a < b else 1
+
+
+@njit(cache=True)
+def _focal_betweenness(lengths, focal):
+    """Brandes betweenness of node `focal[n]` in each agent's complete weighted graph `lengths[n] (M, M)`.
+
+    Dense Dijkstra from every source; undirected, so each pair is counted from both ends and halved.
+    """
+    n_agents, m, _ = lengths.shape
+    out = np.zeros(n_agents)
+    dist = np.empty(m)
+    sigma = np.empty(m)
+    delta = np.empty(m)
+    done = np.empty(m, dtype=np.bool_)
+    order = np.empty(m, dtype=np.int64)
+    pred = np.empty((m, m), dtype=np.bool_)
+    for a in range(n_agents):
+        f = focal[a]
+        total = 0.0
+        for s in range(m):
+            dist[:] = np.inf
+            sigma[:] = 0.0
+            done[:] = False
+            pred[:, :] = False
+            dist[s] = 0.0
+            sigma[s] = 1.0
+            for k in range(m):
+                u = -1
+                for v in range(m):
+                    if not done[v] and (u < 0 or dist[v] < dist[u]):
+                        u = v
+                done[u] = True
+                order[k] = u
+                for v in range(m):
+                    if done[v] or v == u:
+                        continue
+                    alt = dist[u] + lengths[a, u, v]
+                    cmp = _compare_lengths(alt, dist[v])
+                    if cmp < 0:
+                        dist[v] = alt
+                        sigma[v] = sigma[u]
+                        pred[v, :] = False
+                        pred[v, u] = True
+                    elif cmp == 0:
+                        sigma[v] += sigma[u]
+                        pred[v, u] = True
+            delta[:] = 0.0
+            for k in range(m - 1, -1, -1):
+                w = order[k]
+                for v in range(m):
+                    if pred[w, v]:
+                        delta[v] += sigma[v] / sigma[w] * (1.0 + delta[w])
+            if s != f:
+                total += delta[f]
+        out[a] = total / 2.0
+    return out
 
 
 class NonFocalExtremity(Metric):
