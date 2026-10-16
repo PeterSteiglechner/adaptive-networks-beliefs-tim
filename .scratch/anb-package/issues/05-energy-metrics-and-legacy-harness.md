@@ -12,10 +12,10 @@ See the spec `docu/spec-anb-package.md`, "`metrics` module" and seam 2.
 
 **Blocked by:** 04 (Tracer bullet: one detail-mode run end to end)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The harness converts a legacy state into an `AgentState` + adjacency, and is reusable by later metric tickets
-- [ ] Each of the five metrics equals legacy to floating-point tolerance on several random legacy states, including states with zero and non-zero pressure
-- [ ] `SocialEnergy()` reproduces legacy's mean quirk, and `SocialEnergy(aggregate="sum")` gives the neighbour sum
-- [ ] An agent with no neighbours is handled the way legacy handles it
-- [ ] The metrics are vectorised over agents, with no Python loop over agents
+- [x] The harness converts a legacy state into an `AgentState` + adjacency, and is reusable by later metric tickets
+- [x] Each of the five metrics equals legacy to floating-point tolerance on several random legacy states, including states with zero and non-zero pressure
+- [x] `SocialEnergy()` reproduces legacy's mean quirk, and `SocialEnergy(aggregate="sum")` gives the neighbour sum
+- [x] An agent with no neighbours is handled the way legacy handles it
+- [x] The metrics are vectorised over agents, with no Python loop over agents

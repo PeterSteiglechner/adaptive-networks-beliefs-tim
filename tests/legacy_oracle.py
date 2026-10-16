@@ -46,3 +46,67 @@ def load_legacy(detail: bool = False, two_events: bool = False) -> ModuleType:
     legacy.detail = detail
     legacy.track_times = legacy_track_times(legacy, detail)
     return legacy
+
+
+# Seam 2: the same population state on both sides, for comparing `Metric.compute` with `fill_metrics`.
+
+
+def random_legacy_state(legacy: ModuleType, seed: int, link_prob: float = 0.1, isolate=()):
+    """A legacy `(agents, nb_list)` pair with random grid beliefs and random edges in [-1, 1].
+
+    Agents in `isolate` lose all their links (on both ends), so every state has agents without neighbours.
+    The `agents` metric columns are still NaN; `legacy_metrics` fills them.
+    """
+    np.random.seed(seed)
+    agents = legacy.initialise_agents(0.0)
+    agents[:, legacy.edgeids] = np.random.uniform(-1, 1, size=(legacy.n_agents, len(legacy.edgeids)))
+    nb_list = legacy.initialise_network(seed, link_prob)
+    cut = set(isolate)
+    nb_list = [
+        np.array([], dtype=int) if n in cut else nbs[~np.isin(nbs, list(cut))] for n, nbs in enumerate(nb_list)
+    ]
+    return agents, nb_list
+
+
+def legacy_params(rho: float = 1 / 3, ext_strength: float = 0.0) -> dict:
+    """The `params` entries legacy `fill_metrics` reads."""
+    return {"rho": rho, "ext_strength": ext_strength}
+
+
+def legacy_metrics(legacy: ModuleType, agents, nb_list, t: int, params: dict) -> dict[str, np.ndarray]:
+    """Legacy `fill_metrics` on a copy of `agents`, as `{metric column: (N,) values}`."""
+    filled = legacy.fill_metrics(t, agents.copy(), nb_list, params)
+    return {name: filled[:, 2 + k] for k, name in enumerate(legacy.metric_cols)}
+
+
+def to_context(legacy: ModuleType, agents, nb_list, t: int, params: dict):
+    """The same state as an `anb` `StepContext`: `AgentState`, 0/1 adjacency, ρ, and the pressure at `t`."""
+    from anb.agents import ANBAgent, AgentState
+    from anb.metrics import StepContext
+    from anb.model import ANBModel
+    from anb.networks import ErdosRenyiNetwork
+
+    n, m = legacy.n_agents, legacy.M
+    edges = np.zeros((n, m, m))
+    rows, cols = legacy.edge_arr.T
+    edges[:, rows, cols] = agents[:, legacy.edgeids]
+    edges[:, cols, rows] = agents[:, legacy.edgeids]
+    state = AgentState(
+        beliefs=agents[:, legacy.beliefids].copy(),
+        edge_weights=edges,
+        delta_memory=agents[:, list(legacy.delbeliefids)].reshape(n, legacy.tau, m).copy(),
+        focal=np.full(n, legacy.focal, dtype=np.int64),
+    )
+    adjacency = np.zeros((n, n))
+    for i, nbs in enumerate(nb_list):
+        adjacency[i, nbs] = 1.0
+    model = ANBModel(ANBAgent(), ErdosRenyiNetwork(adjacency, link_prob=np.nan), state, params["rho"])
+    ext = params["ext_strength"] if t in legacy.ext_time else 0.0
+    return StepContext(model, t, ext)
+
+
+def legacy_and_anb(legacy: ModuleType, seed: int, t: int, ext_strength: float, rho: float = 1 / 3, isolate=()):
+    """One random state on both sides: `(legacy metric columns, anb StepContext)`."""
+    agents, nb_list = random_legacy_state(legacy, seed, isolate=isolate)
+    params = legacy_params(rho=rho, ext_strength=ext_strength)
+    return legacy_metrics(legacy, agents, nb_list, t, params), to_context(legacy, agents, nb_list, t, params)
