@@ -10,10 +10,10 @@ See the spec `docu/spec-anb-package.md`, "Notebook" (stories 49–51).
 
 **Blocked by:** 09 (Drop-in legacy output)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The notebook runs top to bottom in a fresh `anb` kernel without errors
-- [ ] It shows a single-run time series of `x_focal` and at least two other metrics
-- [ ] It shows response frequencies from a small ensemble
-- [ ] It defines a toy `Network` subclass inline, implementing only `build`, that runs through `Testbed` unchanged
-- [ ] It has no source edits to the package or to `ANBmodel.py`
+- [x] The notebook runs top to bottom in a fresh `anb` kernel without errors
+- [x] It shows a single-run time series of `x_focal` and at least two other metrics
+- [x] It shows response frequencies from a small ensemble
+- [x] It defines a toy `Network` subclass inline, implementing only `build`, that runs through `Testbed` unchanged
+- [x] It has no source edits to the package or to `ANBmodel.py`
