@@ -11,13 +11,24 @@ summary and a paper ↔ code notation table.
 
 ## Commands
 
-Uses `uv` with Python 3.12.
+We use conda with the `anb` env (Python 3.12). The `uv` route below still works too.
+
+```bash
+conda activate anb
+python ANBmodel.py                # runs the sweep configured in its __main__ block
+python analyse_timeseries.py      # analysis scripts; each is a # %% cell script, also run interactively
+```
+
+`analyse_BNmetrics.py` needs `scikit-learn` and `statsmodels`, which are missing from `pyproject.toml`. Install them
+into the env with `conda install -n anb scikit-learn statsmodels`.
+
+With `uv` instead:
 
 ```bash
 uv sync
-uv add scikit-learn statsmodels   # analyse_BNmetrics.py needs these; they're missing from pyproject.toml
-uv run ANBmodel.py                # runs the sweep configured in its __main__ block
-uv run analyse_timeseries.py      # analysis scripts; each is a # %% cell script, also run interactively
+uv add scikit-learn statsmodels
+uv run ANBmodel.py
+uv run analyse_timeseries.py
 ```
 
 There's no test suite, linter or build step. Debug a future Numba kernel with `NUMBA_DISABLE_JIT=1`.
