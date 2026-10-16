@@ -1,6 +1,6 @@
 # ADR-001: Speed up the simulation with Numba, not a GPU
 
-**Status:** Proposed
+**Status:** Proposed, amended 2026-10-14 to fit [ADR-002](adr-002-testbed-architecture.md) (see [Amendments](#amendments))
 **Date:** 2026-10-09
 **Deciders:** Tim Krüger; supervisor sign-off needed because the RNG stream changes (see Consequences)
 
@@ -41,8 +41,9 @@ dynamic-network extension.
 
 ## Decision
 
-**JIT-compile the simulation loop with Numba on the CPU, keep the random-sequential semantics unchanged, and keep
-`joblib` for parallelism across runs.** Do not move to a GPU now.
+**JIT-compile one time step (the random-sequential agent sweep and the belief loop inside it) with Numba on the
+CPU, keep the random-sequential semantics unchanged, and keep `joblib` for parallelism across runs.** The time loop
+stays in Python, in ADR-002's `Testbed`. Do not move to a GPU now.
 
 While rewriting, restructure the state so that a GPU port stays cheap if it is needed later (see Action Items).
 
@@ -50,8 +51,12 @@ While rewriting, restructure the state so that a GPU port stays cheap if it is n
 
 ### Option A: Numba JIT on the CPU (chosen)
 
-Compile the time loop, agent loop and belief loop into a single `@njit` function. Sample from the Glauber
-probabilities by inverse CDF instead of `np.random.choice`.
+Compile the agent loop and belief loop of one time step into an `@njit` sweep kernel, called once per step from a
+Python time loop. Sample from the Glauber probabilities by inverse CDF instead of `np.random.choice`.
+
+The time loop stays outside the kernel for two reasons. It costs only T = 200 Python calls per run, which is
+negligible next to the 200,000 `glauber_fast` calls removed. And metrics (`igraph` betweenness, item 3) and the
+pressure schedule run in Python at the tracked time steps anyway.
 
 | Dimension | Assessment |
 |-----------|------------|
@@ -139,7 +144,8 @@ at N ≤ 1,000.
 
 **Easier**
 - Large ensembles (100 seeds) and fine parameter sweeps become cheap.
-- Adding the dynamic social network: plain loops over `W` inside the JIT function.
+- Adding the dynamic social network: plain loops over `W`, inside the sweep kernel or in a separate per-step
+  kernel (decided in the rewiring ADR, item 7).
 - Fixing [known issues](known-issues.md) #2 (shared shuffle state) and #7 (globals under `__main__`) as part of
   the rewrite, by passing the RNG and parameters explicitly.
 
@@ -155,13 +161,32 @@ at N ≤ 1,000.
 
 ## Action Items
 
-1. [ ] Restructure state into plain arrays: beliefs `(N, M)`, BN weights `(N, M(M−1)/2)`, social network `W`
-   `(N, N)` dense and weighted, past belief changes `(N, τ, M)`. Keep metrics out of the state array.
-2. [ ] Write `simulate(...)` as an `@njit(cache=True)` function with explicit parameters and a seeded RNG, keeping
-   the random-sequential agent and belief order. Represent the current static network as a fixed 0/1 `W`.
+1. [ ] Restructure state into plain arrays: beliefs `(N, M)`, BN weights `(N, M, M)` symmetric (ADR-002 Q18),
+   social network `W` `(N, N)` dense and weighted, past belief changes `(N, τ, M)`. Keep metrics out of the state
+   array.
+2. [ ] Write the sweep kernel as an `@njit(cache=True)` function with explicit parameter arrays and a seeded
+   `np.random.Generator`, keeping the random-sequential agent and belief order. It is `ANBAgent.sweep` in ADR-002
+   (Q22). Represent the current static network as a fixed 0/1 `W`. Check that the installed Numba version
+   accepts a `Generator` argument (supported since Numba 0.56).
 3. [ ] Keep `fill_metrics` and `get_output` in plain Python, called only at `track_times`.
 4. [ ] Benchmark against the current model (same parameters, one run, and the full 240-run ensemble).
 5. [ ] Validate statistically: compare response frequencies (compliant / resilient / resistant) and BN metrics
-   between old and new models over ≥ 100 seeds per configuration.
+   between old and new models over ≥ 100 seeds per configuration. This is the same validation as ADR-002 action
+   item 5, run once.
 6. [ ] Add `numba` to the `anb` environment and to `pyproject.toml`.
-7. [ ] Implement the adaptive social network on top of `W` (separate ADR for the rewiring rules).
+7. [ ] Implement the adaptive social network on top of `W` (separate ADR for the rewiring rules). That ADR also
+   decides whether ties are revised once per step, in a kernel between sweeps (`AdaptiveNetwork.update`), or
+   during an agent's own update, inside the sweep kernel.
+
+## Amendments
+
+**2026-10-14, after ADR-002.** ADR-002 put the time loop in a Python `Testbed` and, in its first version, called
+Python `Agent` methods once per agent. That kept T × N = 20,000 Python-level calls per run and would have capped
+the speed-up this ADR is for. Both ADRs now agree on one sweep kernel per time step:
+
+- Decision and Option A: one `@njit` kernel per time step instead of one function for the whole run.
+- Action item 1: BN weights as a symmetric `(N, M, M)` matrix, following ADR-002 Q18.
+- Action item 2: the kernel is `ANBAgent.sweep` and takes a `np.random.Generator`.
+- Action item 7: the rewiring ADR decides where rewiring runs.
+
+The validation threshold (≥ 100 seeds) is unchanged. ADR-002 now uses it too.

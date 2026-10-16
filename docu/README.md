@@ -13,6 +13,8 @@ Code documentation for the ANB model and its analysis pipeline. The theory and r
 | [known-issues.md](known-issues.md) | Open bugs and inconsistencies in the model and analysis code, each with location, impact and a suggested fix |
 | [analysis.md](analysis.md) | What each `analyse_*.py` script computes and which paper figure or table it produces |
 | [adr-001-numba-over-gpu.md](adr-001-numba-over-gpu.md) | Design decision: speed up the simulation with Numba on the CPU instead of a GPU |
+| [adr-002-testbed-architecture.md](adr-002-testbed-architecture.md) | Design decision: refactor into an `anb/` package with Agent/Network ABCs, an injectable model and a testbed |
+| [class-design.md](class-design.md) | Mermaid class diagrams of the planned `anb/` package (one namespace per module), responsibilities of each class, and the resolution of ADR-002's open points |
 
 ## The model in one paragraph
 
