@@ -14,9 +14,9 @@ See the spec `docu/spec-anb-package.md`, "`metrics` module" and "`testbed` modul
 
 **Status:** ready-for-agent
 
-- [ ] `ResponseClassifier.classify` equals legacy classification on the same frames, including hand-built zero and boundary cases
-- [ ] Ensemble-mode row times are exactly {0, 95.5, 100, 145.5, 195.5, 200}, plus {245.5, 295.5, 300} for `two_events`
-- [ ] The dummies appear only on the 95.5 row in ensemble mode, and only on the t = T rows in detail mode
-- [ ] Changing `window_len`/`recovery` in `TestbedConfig` moves the classifier and aggregator windows consistently
-- [ ] There's one `MetricsRecorder` per run, with no metric state shared between runs
-- [ ] `run_ensemble(seeds, n_jobs > 1)` gives the same frames as serial `run` for each seed
+- [x] `ResponseClassifier.classify` equals legacy classification on the same frames, including hand-built zero and boundary cases
+- [x] Ensemble-mode row times are exactly {0, 95.5, 100, 145.5, 195.5, 200}, plus {245.5, 295.5, 300} for `two_events`
+- [x] The dummies appear only on the 95.5 row in ensemble mode, and only on the t = T rows in detail mode
+- [x] Changing `window_len`/`recovery` in `TestbedConfig` moves the classifier and aggregator windows consistently
+- [x] There's one `MetricsRecorder` per run, with no metric state shared between runs
+- [x] `run_ensemble(seeds, n_jobs > 1)` gives the same frames as serial `run` for each seed

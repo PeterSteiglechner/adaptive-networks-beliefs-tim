@@ -4,8 +4,9 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 
-from .metrics import Degree, FocalBelief, Metric, MetricsRecorder, StepContext
+from .metrics import RESPONSE_COLUMNS, Degree, FocalBelief, Metric, MetricsRecorder, ResponseClassifier, StepContext
 from .model import ModelSpec
 
 
@@ -70,6 +71,30 @@ class TestbedConfig:
         return sorted(steps)
 
 
+class WindowAggregator:
+    """Ensemble-mode output: the snapshot rows plus one per-agent mean row per window.
+
+    Each mean row is labelled with its window's midpoint (95.5, 145.5, …). The response dummies go on the
+    `before` row only, as the last columns, and are NaN everywhere else (legacy's column order).
+    """
+
+    def __init__(self, windows: dict[str, range], snapshot_times: list[int]):
+        self.windows = dict(windows)
+        self.snapshot_times = list(snapshot_times)
+
+    def aggregate(self, frame: pd.DataFrame, responses: pd.DataFrame) -> pd.DataFrame:
+        values = [c for c in frame.columns if c not in ("t", "id")]
+        blocks = [frame[frame.t.isin(self.snapshot_times)]]
+        for name, window in self.windows.items():
+            means = frame[frame.t.isin(window)].groupby("id")[values].mean().reset_index()
+            means.insert(0, "t", np.mean(window))
+            if name == "before":
+                means[list(RESPONSE_COLUMNS)] = responses.reindex(means.id).to_numpy()
+            blocks.append(means)
+        out = pd.concat(blocks, ignore_index=True)
+        return out.sort_values(["t", "id"], kind="stable", ignore_index=True)
+
+
 @dataclass
 class SimulationResult:
     """One run: the finished frame, the parameters (spec and schedule) and the seed."""
@@ -84,14 +109,23 @@ class Testbed:
 
     __test__ = False  # not a pytest test class
 
-    def __init__(self, spec: ModelSpec, config: TestbedConfig, metrics: list[Metric] | None = None):
+    def __init__(
+        self,
+        spec: ModelSpec,
+        config: TestbedConfig,
+        metrics: list[Metric] | None = None,
+        classifier: ResponseClassifier | None = None,
+        aggregator: WindowAggregator | None = None,
+    ):
         self.spec = spec
         self.config = config
         self.metrics = [Degree(), FocalBelief()] if metrics is None else list(metrics)
+        self.classifier = classifier or ResponseClassifier.from_windows(config.windows())
+        self.aggregator = aggregator or WindowAggregator(config.windows(), config.snapshot_times())
+        if self.classifier.column not in {metric.name for metric in self.metrics}:
+            raise ValueError(f"the response classifier reads {self.classifier.column!r}; add its metric")
 
     def run(self, seed: int) -> SimulationResult:
-        if not self.config.detail:
-            raise NotImplementedError("ensemble mode needs the window aggregation (ticket 08)")
         schedule = self.config.schedule
         rng = np.random.default_rng(seed)
         model = self.spec.build(rng)
@@ -105,5 +139,26 @@ class Testbed:
             if t in tracked:
                 recorder.record(StepContext(model, t, ext))
 
+        frame = recorder.to_frame()
+        responses = self.classifier.classify(frame)
+        if self.config.detail:
+            frame = self._attach_at_end(frame, responses)
+        else:
+            frame = self.aggregator.aggregate(frame, responses)
+
         params = {**self.spec.params(), "ext_strength": schedule.strength, "n_events": schedule.n_events}
-        return SimulationResult(recorder.to_frame(), params, seed)
+        return SimulationResult(frame, params, seed)
+
+    def run_ensemble(self, seeds, n_jobs: int = 1) -> list[SimulationResult]:
+        """`run(seed)` for each seed, in parallel with joblib. Each worker builds its own model."""
+        return Parallel(n_jobs=n_jobs)(delayed(self.run)(seed) for seed in seeds)
+
+    def _attach_at_end(self, frame: pd.DataFrame, responses: pd.DataFrame) -> pd.DataFrame:
+        """Detail mode: the dummies as 0/1 on the rows at t = T, NaN elsewhere, after the metric columns."""
+        at_end = frame.t == self.config.T
+        position = 2 + len(self.metrics)
+        for k, name in enumerate(RESPONSE_COLUMNS):
+            column = np.full(len(frame), np.nan)
+            column[at_end.to_numpy()] = responses[name].reindex(frame.id[at_end]).astype(int).to_numpy()
+            frame.insert(position + k, name, column)
+        return frame

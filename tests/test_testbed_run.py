@@ -41,7 +41,8 @@ def test_detail_frame_has_every_step_and_the_expected_columns():
     result = run(seed=3)
     frame = result.frame
 
-    assert list(frame.columns) == ["t", "id", "n_nbs", "x_focal"] + [str(m) for m in range(10)] + EDGE_COLS
+    dummies = ["persistPos", "nonpersistPos", "compliant", "resilient", "resistant", "latecompliant"]
+    assert list(frame.columns) == ["t", "id", "n_nbs", "x_focal"] + dummies + [str(m) for m in range(10)] + EDGE_COLS
     assert sorted(frame.t.unique()) == list(range(10))
     assert all(sorted(g.id) == list(range(N)) for _, g in frame.groupby("t"))
     assert result.seed == 3

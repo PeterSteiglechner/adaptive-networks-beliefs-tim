@@ -239,6 +239,43 @@ class ExpectedInfluence(Metric):
         return _focal_field(ctx.model.state)
 
 
+RESPONSE_COLUMNS = ("persistPos", "nonpersistPos", "compliant", "resilient", "resistant", "latecompliant")
+
+
+class ResponseClassifier:
+    """Labels each agent's response to the pressure from its focal-belief means over three windows.
+
+    The rules are legacy's, unchanged (known issue #9): a mean of exactly 0 counts as positive, except in
+    `latecompliant`, which needs `after > 0`, so before < 0, during < 0, after = 0 gets no label.
+    """
+
+    def __init__(self, before: range, during: range, after: range, column: str = "x_focal"):
+        self.before, self.during, self.after = before, during, after
+        self.column = column
+
+    @classmethod
+    def from_windows(cls, windows: dict[str, range], column: str = "x_focal") -> ResponseClassifier:
+        return cls(windows["before"], windows["during"], windows["after"], column)
+
+    def classify(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """One row per agent (indexed by `id`), one bool column per response."""
+        if self.column not in frame:
+            raise KeyError(f"classification needs the {self.column!r} column; add the FocalBelief metric")
+        pivot = frame.pivot_table(index="t", columns="id", values=self.column)
+        before, during, after = (pivot.loc[pivot.index.isin(w)].mean(axis=0)
+                                 for w in (self.before, self.during, self.after))
+        out = pd.DataFrame({
+            "persistPos": (before >= 0) & (during >= 0) & (after >= 0),
+            "nonpersistPos": (before >= 0) & (after < 0),
+            "compliant": (before < 0) & (during >= 0) & (after >= 0),
+            "resilient": (before < 0) & (during >= 0) & (after < 0),
+            "resistant": (before < 0) & (during < 0) & (after < 0),
+            "latecompliant": (before < 0) & (during < 0) & (after > 0),
+        })
+        out.index = out.index.astype(int)
+        return out
+
+
 class MetricsRecorder:
     """Snapshots every metric plus beliefs and edges at each recorded step. One recorder per run."""
 
