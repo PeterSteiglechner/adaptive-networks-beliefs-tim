@@ -164,12 +164,15 @@ at N ≤ 1,000.
 1. [ ] Restructure state into plain arrays: beliefs `(N, M)`, BN weights `(N, M, M)` symmetric (ADR-002 Q18),
    social network `W` `(N, N)` dense and weighted, past belief changes `(N, τ, M)`. Keep metrics out of the state
    array.
-2. [ ] Write the sweep kernel as an `@njit(cache=True)` function with explicit parameter arrays and a seeded
+2. [x] Write the sweep kernel as an `@njit(cache=True)` function with explicit parameter arrays and a seeded
    `np.random.Generator`, keeping the random-sequential agent and belief order. It is `ANBAgent.sweep` in ADR-002
    (Q22). Represent the current static network as a fixed 0/1 `W`. Check that the installed Numba version
    accepts a `Generator` argument (supported since Numba 0.56).
 3. [ ] Keep `fill_metrics` and `get_output` in plain Python, called only at `track_times`.
-4. [ ] Benchmark against the current model (same parameters, one run, and the full 240-run ensemble).
+4. [ ] Benchmark against the current model (same parameters, one run, and the full 240-run ensemble). One run is
+   done (`pytest -m slow -s tests/test_benchmark.py`): on 2026-10-16 the update loop took 3.2 s in legacy and
+   0.05 s in `anb` (62×), the metrics 0.32 s and 0.06 s, and the first sweep compiles in about 3 s once, then
+   loads from the disk cache in about 0.1 s. The 240-run ensemble is still open.
 5. [ ] Validate statistically: compare response frequencies (compliant / resilient / resistant) and BN metrics
    between old and new models over ≥ 100 seeds per configuration. This is the same validation as ADR-002 action
    item 5, run once.

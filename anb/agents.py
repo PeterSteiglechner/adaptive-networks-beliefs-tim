@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import numpy as np
+from numba import njit
 
 PER_AGENT_PARAMS = ("beta", "eps", "mu", "lam", "init_w")
 
@@ -128,44 +129,80 @@ class ANBAgent(Agent):
         )
 
 
+@njit(cache=True)
 def _sweep(beliefs, edges, memory, focal, adjacency, options, beta, eps, mu, lam, fixed, rho, ext, learning, rng):
-    """The sweep kernel on plain arrays (to become `@njit` in ticket 10).
+    """The sweep kernel on plain arrays. With `NUMBA_DISABLE_JIT=1` it runs as plain Python.
 
     Agents update in shuffled order and see neighbours already updated in this step. The social input is
     ρ · Σ_k A_ik x_foc(k); the social edge term uses the A-weighted mean of the neighbours' edge matrices.
+    Each belief is resampled from its Glauber probabilities over `options` by inverse CDF.
     """
     n_agents, m = beliefs.shape
+    n_options = options.shape[0]
+    tau = memory.shape[1]
+    prior = np.empty(m)
+    cdf = np.empty(n_options)
+    delta = np.empty(m)
+    social_edges = np.empty((m, m))
     for i in rng.permutation(n_agents):
         if fixed[i]:
             continue
-        nbs = np.flatnonzero(adjacency[i])
         f = focal[i]
         social = 0.0
-        for k in nbs:
-            social += adjacency[i, k] * beliefs[k, focal[k]]
+        weight_sum = 0.0
+        n_nbs = 0
+        for k in range(n_agents):
+            a = adjacency[i, k]
+            if a != 0.0:
+                social += a * beliefs[k, focal[k]]
+                weight_sum += a
+                n_nbs += 1
 
-        prior = beliefs[i].copy()
+        for d in range(m):
+            prior[d] = beliefs[i, d]
         for d in rng.permutation(m):
-            field = edges[i, d] @ beliefs[i]  # zero diagonal: only the other dimensions contribute
+            field = 0.0  # zero diagonal: only the other dimensions contribute
+            for e in range(m):
+                field += edges[i, d, e] * beliefs[i, e]
             if d == f:
                 field += ext + rho * social
-            dH = -(options - beliefs[i, d]) * field
-            prob = 0.5 * (1.0 + np.tanh(-0.5 * beta[i] * dH))  # = 1 / (1 + exp(beta * dH)), overflow-free
-            cdf = np.cumsum(prob)
-            idx = min(np.searchsorted(cdf, rng.random() * cdf[-1], side="right"), len(options) - 1)
+            total = 0.0
+            for o in range(n_options):
+                dH = -(options[o] - beliefs[i, d]) * field
+                total += 0.5 * (1.0 + np.tanh(-0.5 * beta[i] * dH))  # = 1 / (1 + exp(beta * dH)), overflow-free
+                cdf[o] = total
+            u = rng.random() * total
+            idx = 0
+            while idx < n_options - 1 and cdf[idx] <= u:
+                idx += 1
             beliefs[i, d] = options[idx]
-        memory[i, 1:] = memory[i, :-1]
-        memory[i, 0] = beliefs[i] - prior
+        for s in range(tau - 1, 0, -1):
+            for d in range(m):
+                memory[i, s, d] = memory[i, s - 1, d]
+        for d in range(m):
+            memory[i, 0, d] = beliefs[i, d] - prior[d]
 
         if learning:
-            delta = memory[i].mean(axis=0)
-            hebb = np.outer(delta, delta)
-            np.fill_diagonal(hebb, 0.0)
-            if len(nbs) > 0:
-                w = adjacency[i, nbs]
-                social_edges = np.tensordot(w, edges[nbs], axes=1) / w.sum()
-                mu_i = mu[i]
-            else:
-                social_edges = edges[i]
-                mu_i = 0.0
-            edges[i] += eps[i] * hebb + mu_i * (social_edges - edges[i]) - lam[i] * edges[i]
+            for d in range(m):
+                acc = 0.0
+                for s in range(tau):
+                    acc += memory[i, s, d]
+                delta[d] = acc / tau
+            if n_nbs > 0:
+                social_edges[:] = 0.0
+                for k in range(n_agents):
+                    a = adjacency[i, k]
+                    if a != 0.0:
+                        for d in range(m):
+                            for e in range(m):
+                                social_edges[d, e] += a * edges[k, d, e]
+                social_edges /= weight_sum
+            for d in range(m):
+                for e in range(m):
+                    if d == e:
+                        continue
+                    w = edges[i, d, e]
+                    change = eps[i] * delta[d] * delta[e] - lam[i] * w
+                    if n_nbs > 0:  # μ = 0 without neighbours
+                        change += mu[i] * (social_edges[d, e] - w)
+                    edges[i, d, e] = w + change

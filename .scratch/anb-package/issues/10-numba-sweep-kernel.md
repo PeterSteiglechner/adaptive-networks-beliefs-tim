@@ -4,9 +4,9 @@
 
 **Blocked by:** 09 (Drop-in legacy output)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The whole test suite passes with JIT on and with `NUMBA_DISABLE_JIT=1`
-- [ ] A second Python session reuses the on-disk cache instead of recompiling (compile time measured once, then cached)
-- [ ] On-demand benchmark: one full run (N = 100, M = 10, T = 200, all 14 metrics) new vs legacy, with the update loop timed separately from the metrics. The result is reported against the 50–200× target for the update loop
-- [ ] There's no global RNG in the kernel or its callers. The Generator is passed in
+- [x] The whole test suite passes with JIT on and with `NUMBA_DISABLE_JIT=1`
+- [x] A second Python session reuses the on-disk cache instead of recompiling (compile time measured once, then cached)
+- [x] On-demand benchmark: one full run (N = 100, M = 10, T = 200, all 14 metrics) new vs legacy, with the update loop timed separately from the metrics. The result is reported against the 50–200× target for the update loop
+- [x] There's no global RNG in the kernel or its callers. The Generator is passed in
