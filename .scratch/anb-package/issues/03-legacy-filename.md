@@ -4,8 +4,8 @@
 
 **Blocked by:** 01 (Test scaffold and dependencies)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The result equals `run_one`'s string for every parameter combination in the paper sweeps and in `docu/running-simulations.md`
-- [ ] Covered explicitly: `fixedBNat100` on/off, a non-default `lam`, two-event runs, and detail vs ensemble directory
-- [ ] The legacy strings come from legacy code through the ticket-01 helper, not hand-typed expectations, wherever that's possible without editing `ANBmodel.py`
+- [x] The result equals `run_one`'s string for every parameter combination in the paper sweeps and in `docu/running-simulations.md`
+- [x] Covered explicitly: `fixedBNat100` on/off, a non-default `lam`, two-event runs, and detail vs ensemble directory
+- [x] The legacy strings come from legacy code through the ticket-01 helper, not hand-typed expectations, wherever that's possible without editing `ANBmodel.py`
