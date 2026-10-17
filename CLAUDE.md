@@ -81,6 +81,13 @@ you change the package:
   `pytest -m slow -s tests/test_statistical_validation.py` (~25 min). It caches run summaries in
   `simOut_old_model`, so delete that folder after changing the model.
 
+## Issue tracker
+
+Tickets are local Markdown files, committed with the code. Each feature gets a folder `.scratch/<feature-slug>/`,
+holding `spec.md` (the PRD) and `issues/NN-<slug>.md` (one ticket per vertical slice, numbered in dependency order).
+A file carries its triage label on a `**Labels:**` line (e.g. `ready-for-agent`). A ticket has `**Blocked by:**`,
+`**Status:**` and a checkbox list of acceptance criteria. Delete a feature's folder once it's shipped.
+
 ## Known pitfalls
 
 `docu/known-issues.md` lists open bugs with locations. Check it before you "fix" an odd-looking behaviour,
