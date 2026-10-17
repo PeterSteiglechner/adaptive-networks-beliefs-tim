@@ -1,7 +1,10 @@
 """Experiment protocol: when pressure is applied and which steps are analysed, and the run loop."""
 
+import logging
+import math
 import time
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +14,8 @@ from joblib import Parallel, delayed
 from .io import legacy_filename, parameter_columns
 from .metrics import RESPONSE_COLUMNS, Metric, MetricsRecorder, ResponseClassifier, StepContext, default_metrics
 from .model import ModelSpec
+
+log = logging.getLogger(__name__)
 
 
 class PressureSchedule:
@@ -216,8 +221,8 @@ class Testbed:
         return output_path(self.params(), seed, self.config.detail, directory, legacy_names)
 
     def run_ensemble(self, seeds, n_jobs: int = 1) -> list[SimulationResult]:
-        """`run(seed)` for each seed, in parallel with joblib. Each worker builds its own model."""
-        return Parallel(n_jobs=n_jobs)(delayed(self.run)(seed) for seed in seeds)
+        """`run(seed)` for each seed, in parallel with joblib, in seed order. Each worker builds its own model."""
+        return self._run_seeds_logged(self.run, seeds, n_jobs, summary=lambda results: f"{len(results)} results")
 
     def save_ensemble(self, seeds, out_dir, n_jobs: int = 1, legacy_names: bool = True) -> list[Path]:
         """`run(seed).save(out_dir, legacy_names)` for each seed, and the paths in seed order.
@@ -225,8 +230,38 @@ class Testbed:
         Each worker writes its own CSV as soon as its seed finishes and returns only a `SavedRun`, so finished
         frames never pile up in memory and a crash keeps the files written so far. Existing files are overwritten.
         """
-        runs = Parallel(n_jobs=n_jobs)(delayed(self._run_and_save)(seed, out_dir, legacy_names) for seed in seeds)
+        runs = self._run_seeds_logged(
+            partial(self._run_and_save, out_dir=out_dir, legacy_names=legacy_names), seeds, n_jobs, out_dir,
+            on_done=lambda run: log.debug("wrote %s", run.path),
+            summary=lambda runs: f"{len(runs)} written, 0 skipped, in {out_dir}",
+        )
         return [r.path for r in runs]
+
+    def _run_seeds_logged(self, task, seeds, n_jobs: int, out_dir=None, on_done=None, summary=None) -> list:
+        """`task(seed)` for each seed with joblib, and the results in seed order.
+
+        Logs the start, progress every tenth of the seeds and the finish (with `summary(results)`). Workers' log
+        records don't reach the parent under loky, so all logging happens here, as the results arrive.
+        """
+        seeds = list(seeds)
+        total = len(seeds)
+        where = f", out_dir={out_dir}" if out_dir is not None else ""
+        log.info("ensemble start: %s | %d seeds, n_jobs=%d%s", _format_params(self.params()), total, n_jobs, where)
+        every = max(1, math.ceil(total / 10))
+        start = time.perf_counter()
+        results = [None] * total
+        tasks = (delayed(_indexed)(task, i, seed) for i, seed in enumerate(seeds))
+        for done, (i, result) in enumerate(Parallel(n_jobs=n_jobs, return_as="generator_unordered")(tasks), start=1):
+            results[i] = result
+            if on_done is not None:
+                on_done(result)
+            if done % every == 0 or done == total:
+                elapsed = time.perf_counter() - start
+                eta = elapsed / done * (total - done)
+                log.info("%d/%d seeds done, elapsed %s, ETA %s", done, total, _duration(elapsed), _duration(eta))
+        finish = f": {summary(results)}" if summary is not None else ""
+        log.info("ensemble done in %s%s", _duration(time.perf_counter() - start), finish)
+        return results
 
     def _run_and_save(self, seed: int, out_dir, legacy_names: bool) -> SavedRun:
         """One `save_ensemble` worker: run the seed, write its CSV and return only the small record."""
@@ -243,3 +278,31 @@ class Testbed:
             column[at_end.to_numpy()] = responses[name].reindex(frame.id[at_end]).astype(int).to_numpy()
             frame.insert(position + k, name, column)
         return frame
+
+
+def _indexed(task, i: int, seed: int):
+    """Run `task(seed)` in a worker and tag the result with its position, so unordered results can be put back."""
+    return i, task(seed)
+
+
+def _format_params(params: dict) -> str:
+    """`name=value` pairs: floats to 2 decimals (`mu` to 3), bools and ints as is, `(N,)` arrays as their mean."""
+
+    def fmt(name, value):
+        if np.ndim(value) > 0:
+            return f"array({np.size(value)}, mean={np.mean(value):.2f})"
+        if isinstance(value, (bool, np.bool_, int, np.integer)):
+            return str(value)
+        if isinstance(value, (float, np.floating)):
+            return f"{value:.3f}" if name == "mu" else f"{value:.2f}"
+        return str(value)
+
+    return " ".join(f"{name}={fmt(name, value)}" for name, value in params.items())
+
+
+def _duration(seconds: float) -> str:
+    """`12.3s` under a minute, otherwise `h:mm:ss`."""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes, secs = divmod(round(seconds), 60)
+    return f"{minutes // 60}:{minutes % 60:02d}:{secs:02d}"
