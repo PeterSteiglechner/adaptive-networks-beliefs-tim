@@ -1,4 +1,6 @@
-"""The demo notebook runs top to bottom (stories 49–51). Slow: it runs one detail seed plus two small ensembles."""
+"""The demo notebook runs top to bottom (stories 49–51). Slow: it runs one detail seed plus two small ensembles.
+
+The testbed notebook's full sweep is far too slow for a test, so it's only checked to parse."""
 
 import json
 import os
@@ -9,15 +11,20 @@ from pathlib import Path
 import pytest
 
 NOTEBOOK = Path(__file__).parents[1] / "notebooks" / "demo.ipynb"
+TESTBED_NOTEBOOK = NOTEBOOK.with_name("testbed.ipynb")
 
 
-def code_cells():
-    cells = json.loads(NOTEBOOK.read_text())["cells"]
+def code_cells(notebook=NOTEBOOK):
+    cells = json.loads(notebook.read_text())["cells"]
     return ["".join(cell["source"]) for cell in cells if cell["cell_type"] == "code"]
 
 
 def test_notebook_has_no_magics_so_it_runs_as_a_plain_script():
     assert all(not line.lstrip().startswith(("%", "!")) for cell in code_cells() for line in cell.splitlines())
+
+
+def test_testbed_notebook_compiles_as_a_plain_script():
+    compile("\n\n".join(code_cells(TESTBED_NOTEBOOK)), str(TESTBED_NOTEBOOK), "exec")
 
 
 @pytest.mark.slow

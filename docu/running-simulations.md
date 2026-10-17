@@ -115,6 +115,48 @@ The `mu = 0` case is already covered by recipe 2.
 `fname` in `run_one` yourself, e.g. `fname += f"_M{M:.2f}"`, or rename the files afterwards. The
 suffix goes right after `seed{seed}` and before `.csv`.
 
+## With the `anb` package
+
+The package runs the same simulations configured from Python (see the quick start in [README.md](README.md)).
+`../notebooks/testbed.ipynb` runs the main ensemble (recipe 2) this way. Paths are relative to where you run:
+`"simOut"` from the repo root is `"../simOut"` from `notebooks/`.
+
+**Saving an ensemble.** `Testbed.save_ensemble(seeds, out_dir, n_jobs=1, legacy_names=True, skip_existing=False)`
+runs every seed and writes its CSV from the worker as soon as the seed finishes, so a crash keeps everything done
+so far and finished frames don't pile up in memory. It returns every seed's path in seed order. The files are the
+same as `run(seed).save(out_dir, legacy_names)` writes: legacy filenames by default, so the analysis scripts find
+them, or `seed{seed}.csv` with `legacy_names=False`. `run_ensemble(seeds, n_jobs=1)` returns the results in
+memory instead.
+
+```python
+testbed = Testbed(spec, TestbedConfig(PressureSchedule.single_event(4)))
+paths = testbed.save_ensemble(range(100), "simOut", n_jobs=-2)   # n_jobs=-2: all cores but one
+```
+
+**Resuming a crashed sweep.** By default `save_ensemble` overwrites existing CSVs. Rerun it with
+`skip_existing=True` and it skips every seed whose CSV already exists and only runs the missing ones. An
+ensemble whose seeds all exist finishes at once.
+
+> **Stale CSVs.** `skip_existing=True` checks only that a file exists, not which model version wrote it. After
+> changing the model, delete the output folder or write to a new one, otherwise the resumed sweep mixes old and
+> new results.
+
+**Logging.** The package logs through the `anb` logger and stays silent until you configure logging. One line
+turns it on:
+
+```python
+import logging
+logging.basicConfig(level=logging.INFO)
+```
+
+At INFO each ensemble logs a start line (its parameters, the seed count, `n_jobs` and, for `save_ensemble`, the
+output directory), the number of skipped seeds if any, a progress line roughly every 10% of the seeds that run
+(done/total, elapsed, ETA) and a finish line (elapsed time, plus the files written and skipped for
+`save_ensemble` or the number of results for `run_ensemble`). At DEBUG `save_ensemble` also logs every written
+path. The
+testbed notebook adds an `ensemble i/n` line per (setting, pressure), timestamps every line and also writes the
+log to `sweep.log` next to the CSVs.
+
 ## Rough cost
 
 One ensemble simulation (N=100, M=10, T=200) is quick. Metrics are only computed at 34 tracked

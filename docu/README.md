@@ -63,9 +63,13 @@ from anb.testbed import PressureSchedule, Testbed, TestbedConfig
 
 spec = ModelSpec(ANBAgent(beta=3.0, eps=1.0, mu=0.0, init_w=0.2), ErdosRenyiNetwork, {"link_prob": 0.1})
 testbed = Testbed(spec, TestbedConfig(PressureSchedule.single_event(4)))
-for result in testbed.run_ensemble(range(100), n_jobs=-1):
-    result.save()                   # simOut/sim_link_prob0.10_..._seed{n}.csv
+testbed.save_ensemble(range(100), "simOut", n_jobs=-1)   # simOut/sim_link_prob0.10_..._seed{n}.csv
 ```
+
+`save_ensemble` writes each seed's CSV as soon as it finishes and returns the paths. `run_ensemble` returns the
+results in memory instead. Both log progress once you call `logging.basicConfig(level=logging.INFO)`.
+`save_ensemble(..., skip_existing=True)` resumes a crashed sweep. See [running-simulations.md](running-simulations.md#with-the-anb-package)
+for both, including why `skip_existing` is unsafe after a model change.
 
 The adaptive→static configuration is `ANBAgent(..., learning_until=101)`. Until the supervisor signs off on the
 differences in [validation.md](validation.md), keep paper results on `ANBmodel.py`.
