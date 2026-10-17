@@ -1,5 +1,6 @@
 """Experiment protocol: when pressure is applied and which steps are analysed, and the run loop."""
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -152,6 +153,15 @@ class SimulationResult:
         return path
 
 
+@dataclass(frozen=True)
+class SavedRun:
+    """What a `save_ensemble` worker sends back instead of the frame: the seed, where its CSV went and how long it took."""
+
+    seed: int
+    path: Path
+    runtime: float
+
+
 class Testbed:
     """Owns the experiment: seeding, the time loop, the pressure schedule and metric recording."""
 
@@ -208,6 +218,21 @@ class Testbed:
     def run_ensemble(self, seeds, n_jobs: int = 1) -> list[SimulationResult]:
         """`run(seed)` for each seed, in parallel with joblib. Each worker builds its own model."""
         return Parallel(n_jobs=n_jobs)(delayed(self.run)(seed) for seed in seeds)
+
+    def save_ensemble(self, seeds, out_dir, n_jobs: int = 1, legacy_names: bool = True) -> list[Path]:
+        """`run(seed).save(out_dir, legacy_names)` for each seed, and the paths in seed order.
+
+        Each worker writes its own CSV as soon as its seed finishes and returns only a `SavedRun`, so finished
+        frames never pile up in memory and a crash keeps the files written so far. Existing files are overwritten.
+        """
+        runs = Parallel(n_jobs=n_jobs)(delayed(self._run_and_save)(seed, out_dir, legacy_names) for seed in seeds)
+        return [r.path for r in runs]
+
+    def _run_and_save(self, seed: int, out_dir, legacy_names: bool) -> SavedRun:
+        """One `save_ensemble` worker: run the seed, write its CSV and return only the small record."""
+        start = time.perf_counter()
+        path = self.run(seed).save(out_dir, legacy_names)
+        return SavedRun(seed, path, time.perf_counter() - start)
 
     def _attach_at_end(self, frame: pd.DataFrame, responses: pd.DataFrame) -> pd.DataFrame:
         """Detail mode: the dummies as 0/1 on the rows at t = T, NaN elsewhere, after the metric columns."""
