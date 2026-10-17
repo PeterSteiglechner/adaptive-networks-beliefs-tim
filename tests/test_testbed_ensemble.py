@@ -1,5 +1,6 @@
 """`Testbed.save_ensemble`: each seed's CSV is written by its worker, and the paths come back in seed order."""
 
+import logging
 from dataclasses import fields
 
 import pytest
@@ -18,6 +19,20 @@ def make_testbed():
                      n_agents=6, rho=1 / 3)
     return Testbed(spec, TestbedConfig(PressureSchedule(4, [(4, 6)]), window_len=2, recovery=3))
 
+
+def write_stale(testbed, seeds, directory):
+    """Put a placeholder CSV where each seed's output goes, and return the paths."""
+    paths = [testbed.output_path(seed, directory) for seed in seeds]
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("stale")
+    return paths
+
+
+
+def anb_messages(caplog, level):
+    """The text of the `anb` records at exactly `level`."""
+    return [r.getMessage() for r in caplog.records if r.name.startswith("anb") and r.levelno == level]
 
 @pytest.mark.parametrize("legacy_names", [True, False])
 def test_save_ensemble_writes_what_run_then_save_writes_and_returns_paths_in_seed_order(legacy_names, tmp_path):
@@ -47,9 +62,7 @@ def test_save_ensemble_writes_legacy_names_by_default(tmp_path):
 
 def test_save_ensemble_overwrites_existing_files(tmp_path):
     testbed = make_testbed()
-    stale = testbed.output_path(SEEDS[0], tmp_path)
-    stale.parent.mkdir(parents=True, exist_ok=True)
-    stale.write_text("stale")
+    (stale,) = write_stale(testbed, SEEDS[:1], tmp_path)
 
     testbed.save_ensemble(SEEDS, tmp_path)
 
@@ -70,3 +83,39 @@ def test_workers_send_back_only_seed_path_and_runtime(tmp_path):
 
     assert [f.name for f in fields(SavedRun)] == ["seed", "path", "runtime"]
     assert record.seed == SEEDS[0] and record.path.exists() and record.runtime > 0
+
+
+def test_skip_existing_leaves_existing_files_untouched_and_runs_only_missing_seeds(tmp_path, caplog):
+    testbed = make_testbed()
+    (stale,) = write_stale(testbed, SEEDS[1:2], tmp_path)
+    mtime = stale.stat().st_mtime_ns
+    caplog.set_level(logging.DEBUG, logger="anb")
+
+    paths = testbed.save_ensemble(SEEDS, tmp_path, skip_existing=True)
+
+    assert paths == [testbed.output_path(seed, tmp_path) for seed in SEEDS]
+    assert stale.read_text() == "stale" and stale.stat().st_mtime_ns == mtime
+    for seed in (SEEDS[0], SEEDS[2]):
+        assert testbed.output_path(seed, tmp_path).read_bytes() == \
+            testbed.run(seed).save(tmp_path / "fresh").read_bytes()
+    written = anb_messages(caplog, logging.DEBUG)
+    assert len(written) == 2 and not any(str(stale) in line for line in written)
+    info = anb_messages(caplog, logging.INFO)
+    assert any("skipping 1" in line for line in info)
+    assert any("2/2" in line for line in info)
+    assert "2 written" in info[-1] and "1 skipped" in info[-1]
+
+
+def test_skip_existing_with_every_seed_present_runs_nothing(tmp_path, caplog, monkeypatch):
+    testbed = make_testbed()
+    stale = write_stale(testbed, SEEDS, tmp_path)
+    monkeypatch.setattr(Testbed, "run", lambda self, seed: pytest.fail("no seed should run"))
+    caplog.set_level(logging.INFO, logger="anb")
+
+    paths = testbed.save_ensemble(SEEDS, tmp_path, skip_existing=True)
+
+    assert paths == stale
+    assert all(p.read_text() == "stale" for p in paths)
+    info = anb_messages(caplog, logging.INFO)
+    assert any("all 3 seeds skipped" in line for line in info)
+    assert "0 written" in info[-1] and "3 skipped" in info[-1]

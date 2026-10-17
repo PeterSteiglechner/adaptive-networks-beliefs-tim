@@ -224,41 +224,59 @@ class Testbed:
         """`run(seed)` for each seed, in parallel with joblib, in seed order. Each worker builds its own model."""
         return self._run_seeds_logged(self.run, seeds, n_jobs, summary=lambda results: f"{len(results)} results")
 
-    def save_ensemble(self, seeds, out_dir, n_jobs: int = 1, legacy_names: bool = True) -> list[Path]:
-        """`run(seed).save(out_dir, legacy_names)` for each seed, and the paths in seed order.
+    def save_ensemble(
+        self, seeds, out_dir, n_jobs: int = 1, legacy_names: bool = True, skip_existing: bool = False
+    ) -> list[Path]:
+        """`run(seed).save(out_dir, legacy_names)` for each seed, and every seed's path in seed order.
 
         Each worker writes its own CSV as soon as its seed finishes and returns only a `SavedRun`, so finished
-        frames never pile up in memory and a crash keeps the files written so far. Existing files are overwritten.
-        """
-        runs = self._run_seeds_logged(
-            partial(self._run_and_save, out_dir=out_dir, legacy_names=legacy_names), seeds, n_jobs, out_dir,
-            on_done=lambda run: log.debug("wrote %s", run.path),
-            summary=lambda runs: f"{len(runs)} written, 0 skipped, in {out_dir}",
-        )
-        return [r.path for r in runs]
-
-    def _run_seeds_logged(self, task, seeds, n_jobs: int, out_dir=None, on_done=None, summary=None) -> list:
-        """`task(seed)` for each seed with joblib, and the results in seed order.
-
-        Logs the start, progress every tenth of the seeds and the finish (with `summary(results)`). Workers' log
-        records don't reach the parent under loky, so all logging happens here, as the results arrive.
+        frames never pile up in memory and a crash keeps the files written so far. Existing files are overwritten,
+        unless `skip_existing`: then seeds whose CSV exists are not run, which resumes a crashed sweep. Their files
+        may be stale if the model changed since, so switch or clear `out_dir` after a model change.
         """
         seeds = list(seeds)
-        total = len(seeds)
+        paths = [self.output_path(seed, out_dir, legacy_names) for seed in seeds]
+        to_run = [seed for seed, path in zip(seeds, paths) if not (skip_existing and path.exists())]
+        skipped = len(seeds) - len(to_run)
+        self._run_seeds_logged(
+            partial(self._run_and_save, out_dir=out_dir, legacy_names=legacy_names), to_run, n_jobs, out_dir,
+            skipped=skipped,
+            on_done=lambda run: log.debug("wrote %s", run.path),
+            summary=lambda runs: f"{len(runs)} written, {skipped} skipped, in {out_dir}",
+        )
+        return paths
+
+    def _run_seeds_logged(
+        self, task, seeds, n_jobs: int, out_dir=None, skipped: int = 0, on_done=None, summary=None
+    ) -> list:
+        """`task(seed)` for each seed with joblib, and the results in seed order.
+
+        Logs the start, the number of `skipped` seeds (already left out of `seeds`), progress every tenth of the
+        seeds that run and the finish (with `summary(results)`). Workers' log records don't reach the parent under
+        loky, so all logging happens here, as the results arrive.
+        """
+        seeds = list(seeds)
+        n_run = len(seeds)
+        n_all = n_run + skipped
         where = f", out_dir={out_dir}" if out_dir is not None else ""
-        log.info("ensemble start: %s | %d seeds, n_jobs=%d%s", _format_params(self.params()), total, n_jobs, where)
-        every = max(1, math.ceil(total / 10))
+        log.info("ensemble start: %s | %d seeds, n_jobs=%d%s", _format_params(self.params()), n_all, n_jobs, where)
+        if skipped and not n_run:
+            log.info("all %d seeds skipped, their CSVs exist", skipped)
+        elif skipped:
+            log.info("skipping %d of %d seeds, their CSVs exist", skipped, n_all)
+        every = max(1, math.ceil(n_run / 10))
         start = time.perf_counter()
-        results = [None] * total
+        results = [None] * n_run
         tasks = (delayed(_indexed)(task, i, seed) for i, seed in enumerate(seeds))
-        for done, (i, result) in enumerate(Parallel(n_jobs=n_jobs, return_as="generator_unordered")(tasks), start=1):
+        finished = Parallel(n_jobs=n_jobs, return_as="generator_unordered")(tasks) if n_run else ()
+        for done, (i, result) in enumerate(finished, start=1):
             results[i] = result
             if on_done is not None:
                 on_done(result)
-            if done % every == 0 or done == total:
+            if done % every == 0 or done == n_run:
                 elapsed = time.perf_counter() - start
-                eta = elapsed / done * (total - done)
-                log.info("%d/%d seeds done, elapsed %s, ETA %s", done, total, _duration(elapsed), _duration(eta))
+                eta = elapsed / done * (n_run - done)
+                log.info("%d/%d seeds done, elapsed %s, ETA %s", done, n_run, _duration(elapsed), _duration(eta))
         finish = f": {summary(results)}" if summary is not None else ""
         log.info("ensemble done in %s%s", _duration(time.perf_counter() - start), finish)
         return results
