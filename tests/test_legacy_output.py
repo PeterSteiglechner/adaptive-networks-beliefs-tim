@@ -175,3 +175,18 @@ def test_legacy_names_fail_clearly_for_other_networks(tmp_path):
     with pytest.raises(ValueError, match="link_prob.*k.*legacy_names=False"):
         result.save(tmp_path)
     assert result.save(tmp_path, legacy_names=False).exists()
+
+
+@pytest.mark.parametrize("legacy_names", [True, False])
+@pytest.mark.parametrize("detail, two_events", [(False, False), (True, False), (False, True)])
+def test_testbed_output_path_equals_the_saved_path_without_running(detail, two_events, legacy_names, tmp_path,
+                                                                    monkeypatch):
+    schedule = (PressureSchedule.two_events if two_events else PressureSchedule.single_event)(4)
+    testbed = Testbed(make_spec(COMBOS[1]), TestbedConfig(schedule, detail=detail))
+    saved = testbed.run(7).save(tmp_path, legacy_names=legacy_names)
+
+    def no_run(seed):
+        raise AssertionError("output_path must not run the seed")
+
+    monkeypatch.setattr(testbed, "run", no_run)
+    assert testbed.output_path(7, tmp_path, legacy_names=legacy_names) == saved

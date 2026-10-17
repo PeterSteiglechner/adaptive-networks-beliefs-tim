@@ -97,6 +97,20 @@ class WindowAggregator:
         return out.sort_values(["t", "id"], kind="stable", ignore_index=True)
 
 
+def output_path(params: dict, seed: int, detail: bool, directory="simOut", legacy_names: bool = True) -> Path:
+    """The CSV path for one seed's run, as `SimulationResult.save` writes it. `params` are the spec's plus the schedule's.
+
+    With `legacy_names`, the name is legacy `run_one`'s (`sim_…`, under `detailed/` and ending in `_detailed` in
+    detail mode). Otherwise it is `seed{seed}.csv`, so use one directory per configuration.
+    """
+    if legacy_names:
+        name = legacy_filename({**params, "seed": seed}, detail)
+        name += "_detailed" if detail else ""
+    else:
+        name = f"seed{seed}"
+    return Path(directory) / f"{name}.csv"
+
+
 @dataclass
 class SimulationResult:
     """One run: the finished frame, the parameters (spec and schedule), the seed and the output mode."""
@@ -132,12 +146,7 @@ class SimulationResult:
         itself writes to `simOut_old_model/`, which keeps the two models' runs apart. Otherwise the name is
         `seed{seed}.csv`, so use one directory per configuration.
         """
-        if legacy_names:
-            name = legacy_filename(self.output_params(), self.detail)
-            name += "_detailed" if self.detail else ""
-        else:
-            name = f"seed{self.seed}"
-        path = Path(directory) / f"{name}.csv"
+        path = output_path(self.params, self.seed, self.detail, directory, legacy_names)
         path.parent.mkdir(parents=True, exist_ok=True)
         self.to_frame().to_csv(path)
         return path
@@ -185,8 +194,16 @@ class Testbed:
         else:
             frame = self.aggregator.aggregate(frame, responses)
 
-        params = {**self.spec.params(), "ext_strength": schedule.strength, "n_events": schedule.n_events}
-        return SimulationResult(frame, params, seed, self.config.detail)
+        return SimulationResult(frame, self.params(), seed, self.config.detail)
+
+    def params(self) -> dict:
+        """The run's parameters, without the seed: the spec's plus the schedule's `ext_strength` and `n_events`."""
+        schedule = self.config.schedule
+        return {**self.spec.params(), "ext_strength": schedule.strength, "n_events": schedule.n_events}
+
+    def output_path(self, seed: int, directory="simOut", legacy_names: bool = True) -> Path:
+        """Where `run(seed).save(directory, legacy_names)` writes, worked out without running the seed."""
+        return output_path(self.params(), seed, self.config.detail, directory, legacy_names)
 
     def run_ensemble(self, seeds, n_jobs: int = 1) -> list[SimulationResult]:
         """`run(seed)` for each seed, in parallel with joblib. Each worker builds its own model."""
