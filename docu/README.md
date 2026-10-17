@@ -8,6 +8,7 @@ Code documentation for the ANB model and its analysis pipeline. The theory and r
 | Document | Contents |
 |----------|----------|
 | [model.md](model.md) | How `ANBmodel.py` implements the theory: parameters, data layout, belief and edge updating, metrics, response classification, output format, caveats |
+| [parameter-cheatsheet.md](parameter-cheatsheet.md) | Every parameter at a glance: what it does, which equation it enters, its legacy and `anb` names, baselines |
 | [system-overview.md](system-overview.md) | Mermaid diagrams: the config → simulation → CSV → analysis → figures pipeline, and the inside of one simulation run |
 | [running-simulations.md](running-simulations.md) | How to configure runs, filename conventions, and exactly which simulations each analysis script needs |
 | [known-issues.md](known-issues.md) | Open bugs and inconsistencies in the model and analysis code, each with location, impact and a suggested fix |
@@ -51,8 +52,8 @@ python analyse_timeseries.py      # then the other analysis scripts, see analysi
 ```
 
 New runs should use the `anb/` package, which is about 46× faster and is configured from Python instead of by
-editing source. `notebooks/testbed.ipynb` walks through it. A run saved with `save(".")` lands under the legacy
-filename, so the analysis scripts read it unchanged:
+editing source. `../notebooks/demo.ipynb` walks through it. A run saved with `save("simOut")` (the default) lands in
+`simOut/` under the legacy filename, so the analysis scripts read it unchanged:
 
 ```python
 from anb.agents import ANBAgent
@@ -63,7 +64,7 @@ from anb.testbed import PressureSchedule, Testbed, TestbedConfig
 spec = ModelSpec(ANBAgent(beta=3.0, eps=1.0, mu=0.0, init_w=0.2), ErdosRenyiNetwork, {"link_prob": 0.1})
 testbed = Testbed(spec, TestbedConfig(PressureSchedule.single_event(4)))
 for result in testbed.run_ensemble(range(100), n_jobs=-1):
-    result.save(".")                # simOut_old_model/sim_link_prob0.10_..._seed{n}.csv
+    result.save()                   # simOut/sim_link_prob0.10_..._seed{n}.csv
 ```
 
 The adaptive→static configuration is `ANBAgent(..., learning_until=101)`. Until the supervisor signs off on the

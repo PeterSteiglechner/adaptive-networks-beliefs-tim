@@ -192,7 +192,7 @@ columns (per-agent ones joined on `id`). `save(directory, legacy_names=True)`.
 **`legacy_filename(params, detail) -> str`**: reproduces `run_one`'s naming exactly. `params` carries `lam` (from
 `Agent`) and `n_events` (from the schedule), so they are not separate arguments.
 
-### `notebooks/testbed.ipynb`
+### `../notebooks/demo.ipynb`
 
 Not part of the class diagram. It (1) builds a `ModelSpec`, runs one seed and plots the focal belief over time
 and a few metrics, (2) runs a small ensemble and shows response frequencies, (3) defines a toy `Network`
@@ -239,7 +239,7 @@ subclass inline and runs it through the same testbed.
 5. [x] Validate statistically against `ANBmodel.py` (the 4 paper configurations × 6 pressures, ≥ 100 seeds,
    Q25): response frequencies and BN metric distributions. This is also ADR-001 item 5. Passed on 2026-10-16,
    see [validation.md](validation.md).
-6. [x] Write `notebooks/testbed.ipynb` (Q13).
+6. [x] Write `../notebooks/demo.ipynb` (Q13).
 7. [x] Add the ADR and the class design doc to [docu/README.md](README.md).
 8. [ ] Get the supervisor's sign-off on the RNG change (Q7, Q17, ADR-001) and the single `fixedBNat100` meaning
    (Q19). Both are written up for it in [validation.md](validation.md#deliberate-differences-from-legacy-for-sign-off).

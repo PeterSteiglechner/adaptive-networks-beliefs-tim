@@ -558,7 +558,7 @@ if __name__ == "__main__":
     # fixedBNat100 = False
     # param_combis = [
     #     [link_prob, init_w, beta, rho, eps, mu, fixedBNat100]
-    #     for mu in [0.001,0.002,0.005,0.01,0.02,0.05,0.1,0.2,0.5, 1.0
+    #     for mu in [0.001,0.002,0.005,0.01,0.02,0.05,0.1,0.2,0.5, 1.
     #     ]
     # ]
 

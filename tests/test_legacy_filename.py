@@ -31,7 +31,7 @@ def legacy_name(combo, pressure, seed, detail, lam=0.0, two_events=False, tmp_pa
     legacy.lam = lam
     legacy.run_simulation = lambda params: pd.DataFrame()
     monkeypatch.chdir(tmp_path)
-    return legacy.run_one(seed, *combo, pressure)
+    return legacy.run_one(seed, *combo, pressure).removeprefix("simOut_old_model/")
 
 
 def params_for(combo, pressure, seed, lam=0.0, n_events=1):
@@ -72,8 +72,8 @@ def test_two_event_variant(detail, tmp_path, monkeypatch):
 
 def test_detail_selects_directory():
     p = params_for(BN_CONFIGS[3], 4, 1)
-    assert legacy_filename(p, False).startswith("simOut_old_model/sim_")
-    assert legacy_filename(p, True).startswith("simOut_old_model/detailed/sim_")
+    assert legacy_filename(p, False).startswith("sim_")
+    assert legacy_filename(p, True).startswith("detailed/sim_")
 
 
 def test_does_not_add_M_N_tau_suffixes():

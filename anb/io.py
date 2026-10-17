@@ -30,12 +30,13 @@ def _unformatted(v) -> str:
 
 
 def legacy_filename(params: dict, detail: bool) -> str:
-    """The path (without `.csv`) that legacy `run_one` writes for `params`.
+    """The path (without `.csv`) that legacy `run_one` writes for `params`, relative to its output folder.
 
     `params` holds the nine `run_one` keys (`link_prob`, `init_w`, `beta`, `rho`, `eps`, `mu`,
     `fixedBNat100`, `ext_strength`, `seed`) plus `lam` and `n_events`, all scalars. As in legacy, the
     `_M`/`_N`/`_tau` suffixes are not added (known issue #4). Detail-mode files additionally end in
-    `_detailed` before `.csv`; that suffix is not part of this name, as in `run_one`'s return value.
+    `_detailed` before `.csv`; that suffix is not part of this name, as in `run_one`'s return value. Legacy's
+    `simOut_old_model/` prefix is left off too, so `SimulationResult.save` picks the folder (`simOut/` by default).
 
     Raises `ValueError` for parameters legacy can't name: a missing key (any network but Erdős–Rényi), an
     extra one (`learning_until` ≠ 101, a `fixed` mask, other network kwargs) or a per-agent value.
@@ -62,7 +63,7 @@ def legacy_filename(params: dict, detail: bool) -> str:
             parts.append(k if v else "")
         else:
             parts.append(f"{k}{v:.2f}")
-    name = "simOut_old_model/" + ("detailed/" if detail else "") + "sim_" + "_".join(parts)
+    name = ("detailed/" if detail else "") + "sim_" + "_".join(parts)
     name = name.replace("__", "_")
     if params["n_events"] == 2:
         name += "_2events"

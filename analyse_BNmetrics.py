@@ -10,6 +10,8 @@ import matplotlib as mpl
 import matplotlib.patches as mpatches
 import os 
 
+os.makedirs("figs", exist_ok=True)
+
 plt.rcParams.update({"font.size": 10})
 bigfs = 9
 smallfs = 7
@@ -159,7 +161,7 @@ mean_absedges = []
 init_w, eps, mu, fixedBNat100 = (0.2, 1.0, 0.0, False)
 res = pd.DataFrame()
 all_pressures = [0, 1, 2, 4, 8, 16] if mu==0 else [4]
-seeds = list(range(100))
+seeds = list(range(100))  # must match `seeds` used in the sweep (paper: 100)
 for s in all_pressures:
     for seed in seeds:
         df = pd.read_csv(
@@ -239,11 +241,11 @@ for s_ext in pressures:
             for r in negcols:
                 if r in props:
                     print(
-                        f"${100*props[r]/summeNeg:.1f}\,\%$",
+                        rf"${100*props[r]/summeNeg:.1f}\,\%$",
                         end=" & ",
                     )
                 else:
-                    print(f"${0.0:.1f}\,\%$ & ")
+                    print(rf"${0.0:.1f}\,\%$ & ")
             print("\\\\")
 
 
@@ -302,11 +304,11 @@ for s_ext in pressures:
             for r in negcols:
                 if r in props:
                     print(
-                        f"${100*props[r]/summeNeg:.1f}\,\%$",
+                        rf"${100*props[r]/summeNeg:.1f}\,\%$",
                         end=" & & &  ",
                     )
                 else:
-                    print(f"${0.0:.1f}\,\%$ & ")
+                    print(rf"${0.0:.1f}\,\%$ & ")
             print("\\\\")
 
 

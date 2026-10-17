@@ -73,7 +73,7 @@ def test_saved_csv_matches_legacy_path_columns_and_order(combo, detail, two_even
 
     path = result.save(tmp_path / "anb")
 
-    assert path == tmp_path / "anb" / expected_path
+    assert path == tmp_path / "anb" / expected_path.relative_to("simOut_old_model")
     got = pd.read_csv(path)
     assert list(got.columns) == list(expected.columns)
     assert list(result.to_frame().columns) == list(expected.columns)[1:]  # legacy's first column is the index

@@ -65,7 +65,7 @@ output keeps only the tracked steps plus averaged rows at t = 95.5/145.5/195.5. 
 
 **The `anb/` package (implemented).** `docu/spec-anb-package.md`, `docu/adr-002-testbed-architecture.md` and
 `docu/class-design.md` specify the refactor into `anb/` (`agents.py`, `networks.py`, `model.py`, `metrics.py`,
-`testbed.py`, `io.py`) plus `notebooks/testbed.ipynb`. The sweep is one Numba kernel per time step
+`testbed.py`, `io.py`) plus `notebooks/demo.ipynb`. The sweep is one Numba kernel per time step
 (`docu/adr-001-numba-over-gpu.md`), and so is `FocalBetweenness` (a Brandes helper). The validation against
 legacy and the benchmark are in `docu/validation.md`. That file also lists the deliberate differences from
 legacy, which still need supervisor sign-off before new runs go into results. These decisions are binding when

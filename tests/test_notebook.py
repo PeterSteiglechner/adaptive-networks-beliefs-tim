@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-NOTEBOOK = Path(__file__).parents[1] / "notebooks" / "testbed.ipynb"
+NOTEBOOK = Path(__file__).parents[1] / "notebooks" / "demo.ipynb"
 
 
 def code_cells():

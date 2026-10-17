@@ -124,12 +124,13 @@ class SimulationResult:
             frame[name] = value if np.ndim(value) == 0 else np.asarray(value)[ids]
         return frame.astype({"t": float, "id": float})
 
-    def save(self, directory=".", legacy_names: bool = True) -> Path:
+    def save(self, directory="simOut", legacy_names: bool = True) -> Path:
         """Write `to_frame()` as CSV under `directory` and return the path.
 
-        With `legacy_names`, the path is legacy `run_one`'s (`simOut_old_model/…`, plus `_detailed` in detail mode), so
-        `save(".")` writes where the `analyse_*.py` scripts look. Otherwise it is `seed{seed}.csv`, so use one
-        directory per configuration.
+        With `legacy_names`, the name is legacy `run_one`'s (`sim_…`, under `detailed/` and ending in `_detailed` in
+        detail mode), so `save("simOut")` from the repo root writes where the `analyse_*.py` scripts look. Legacy
+        itself writes to `simOut_old_model/`, which keeps the two models' runs apart. Otherwise the name is
+        `seed{seed}.csv`, so use one directory per configuration.
         """
         if legacy_names:
             name = legacy_filename(self.output_params(), self.detail)
