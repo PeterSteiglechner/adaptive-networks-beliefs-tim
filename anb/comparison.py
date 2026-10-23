@@ -23,6 +23,7 @@ Plain Python, no Numba.
 import hashlib
 import re
 import shutil
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -517,9 +518,20 @@ def _long_format(frame: pd.DataFrame, implementation: str, replica: int, steps: 
     return pd.concat([out, frame[list(METRICS)].reset_index(drop=True)], axis=1)
 
 
+def _oracle_loader():
+    """`legacy_oracle.load_legacy`, importable from any process: the oracle lives in the repo's `tests/`, which a
+    joblib worker doesn't have on its path."""
+    tests = str(Path(__file__).resolve().parents[1] / "tests")
+    if tests not in sys.path:
+        sys.path.insert(0, tests)
+    from legacy_oracle import load_legacy
+    return load_legacy
+
+
 def _shared_start_replica(implementation, load_legacy, cell, pressure, replica, state, adjacency, steps, schedule):
     steps = set(steps)
     if implementation == "legacy":
+        load_legacy = load_legacy or _oracle_loader()
         frame = _legacy_replica(load_legacy, cell, pressure, replica, state, adjacency, sorted(steps), schedule)
     else:
         spec = SharedStartSpec(_anb_agent(cell), ErdosRenyiNetwork, {"link_prob": cell["link_prob"]},
@@ -537,8 +549,9 @@ def run_shared_start(cell: dict, pressure: float, start_seed: int = 0, k: int = 
     `cell` holds `link_prob`, `init_w`, `beta`, `rho`, `eps`, `mu`, `fixedBNat100` (and optionally `lam`), as
     `parse_filename` returns them. The state (beliefs, edge weights, adjacency, belief-change memory) is drawn once
     from `start_seed`. Replica `r` of each implementation then runs with seed `r`: legacy on a fresh `load_legacy`
-    copy (the oracle's loader, `legacy_oracle.load_legacy` by default, so legacy is only ever reached through it),
-    anb through `Testbed`. The two RNG streams differ by design, so replicas agree in distribution only.
+    copy (the oracle's loader, `legacy_oracle.load_legacy` from the repo's `tests/` by default, so legacy is only
+    ever reached through it), anb through `Testbed`. The two RNG streams differ by design, so replicas agree in
+    distribution only.
 
     `schedule` defaults to the paper's single event (t = 101…150) at strength `pressure`. The runs stop at the
     window's last step. A `fixedBNat100` cell keeps the known gate difference (known issue #8): anb stops learning at t = 101, legacy
@@ -547,8 +560,6 @@ def run_shared_start(cell: dict, pressure: float, start_seed: int = 0, k: int = 
     Returns long format, one row per implementation, replica, step and agent: `implementation`, `replica`, `t`,
     `agent`, then the 14 metrics. The steps are t = 0 and every step of the (inclusive) window.
     """
-    if load_legacy is None:
-        from legacy_oracle import load_legacy  # tests/ is on sys.path under pytest; scripts add it themselves
     schedule = schedule or PressureSchedule.single_event(pressure)
     steps = [0, *range(window[0], window[1] + 1)]
     state, adjacency = build_shared_start(cell, start_seed)
@@ -556,3 +567,47 @@ def run_shared_start(cell: dict, pressure: float, start_seed: int = 0, k: int = 
             for implementation in ("legacy", "anb") for replica in range(k)]
     runs = Parallel(n_jobs=n_jobs)(delayed(_shared_start_replica)(*job) for job in jobs)
     return pd.concat(runs, ignore_index=True)
+
+
+# Step-wise comparison of shared-start runs
+
+SHARED_START_QUANTITIES = (*METRICS, "x_focal_sd")  # replica means of the metrics, and the focal belief's spread
+
+
+@dataclass
+class SharedStartDivergence:
+    """What `compare_shared_start` found: one row per step × quantity (`steps`), and per quantity the first step
+    whose BH-corrected test fails (`first_divergence`, NaN if none)."""
+    steps: pd.DataFrame
+    first_divergence: pd.DataFrame
+
+
+def _replica_quantities(trajectories: pd.DataFrame) -> pd.DataFrame:
+    """One row per implementation, replica and step: the agent mean of each metric and the agent SD of `x_focal`."""
+    groups = trajectories.groupby(["implementation", "replica", "t"])
+    means = groups[list(METRICS)].mean()
+    means["x_focal_sd"] = groups.x_focal.std(ddof=0)
+    return means.reset_index()
+
+
+def compare_shared_start(trajectories: pd.DataFrame) -> SharedStartDivergence:
+    """Compare legacy and anb shared-start ensembles step by step (`run_shared_start`'s long format).
+
+    Each replica is reduced per step to `SHARED_START_QUANTITIES`; the replicas are the unit, as runs are in
+    `compare_folders`. Per step after t = 0 (the shared state) and quantity: the difference of ensemble means
+    (anb − legacy) with a 95 % Welch CI, and a KS test on the replica values. BH runs over all steps and
+    quantities together. A quantity's first divergent step is the first with q < `ALPHA`.
+    """
+    per_replica = _replica_quantities(trajectories[trajectories.t != 0])
+    rows = []
+    for t, at in per_replica.groupby("t"):
+        legacy, anb = at[at.implementation == "legacy"], at[at.implementation == "anb"]
+        for quantity in SHARED_START_QUANTITIES:
+            rows.append({"t": int(t), "quantity": quantity, **compare_values(legacy[quantity], anb[quantity])})
+    steps = correct(pd.DataFrame(rows))
+    failing = steps[steps.fail].groupby("quantity").t
+    first = pd.DataFrame({"quantity": SHARED_START_QUANTITIES})
+    first["first_divergent_step"] = first.quantity.map(failing.min())
+    first["n_divergent_steps"] = first.quantity.map(failing.size()).fillna(0).astype(int)
+    first["n_steps"] = steps.t.nunique()
+    return SharedStartDivergence(steps, first)

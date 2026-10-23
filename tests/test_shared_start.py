@@ -1,5 +1,9 @@
 """Seam B (shared start): legacy and anb from one identical t = 0 state, K replicas each, every step of a window."""
 
+import os
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 
@@ -72,3 +76,21 @@ def test_running_leaves_legacy_on_disk_unchanged():
     before = legacy_oracle.LEGACY_PATH.read_bytes()
     run_shared_start(CELL, 0.0, k=1, window=(1, 2), schedule=SCHEDULE, load_legacy=legacy_oracle.load_legacy)
     assert legacy_oracle.LEGACY_PATH.read_bytes() == before
+
+
+def test_workers_started_before_the_oracle_is_on_the_path_still_find_it(tmp_path):
+    # As in the report script: `compare_folders` starts the worker pool before anything puts `tests/` on the path.
+    code = """
+from joblib import Parallel, delayed
+from anb.comparison import run_shared_start
+from anb.testbed import PressureSchedule
+Parallel(n_jobs=2)(delayed(abs)(i) for i in range(2))
+cell = dict(link_prob=0.1, init_w=0.2, beta=3.0, rho=0.33, eps=1.0, mu=0.0, fixedBNat100=False)
+frame = run_shared_start(cell, 0.0, k=1, window=(1, 2), schedule=PressureSchedule(2.0, [(2, 3)]), n_jobs=2)
+assert set(frame.implementation) == {"legacy", "anb"}
+"""
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    proc = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, env=env, capture_output=True, text=True,
+                          timeout=300)
+
+    assert proc.returncode == 0, proc.stderr

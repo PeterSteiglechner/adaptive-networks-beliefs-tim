@@ -13,8 +13,9 @@ import numpy as np
 import pandas as pd
 
 from anb.agents import ANBAgent
-from anb.comparison import (METRICS, NEGATIVE_RESPONSES, PAPER_CONFIGS, RESPONSES, compare_folders, metric_series,
-                            response_shares, save_under_legacy_names, top_cells)
+from anb.comparison import (METRICS, NEGATIVE_RESPONSES, PAPER_CONFIGS, RESPONSES, SHARED_START_QUANTITIES,
+                            compare_folders, compare_shared_start, metric_series, response_shares, run_shared_start,
+                            save_under_legacy_names, top_cells)
 from anb.model import ModelSpec
 from anb.networks import ErdosRenyiNetwork
 from anb.testbed import PressureSchedule, Testbed, TestbedConfig
@@ -44,7 +45,15 @@ RERUN_PRESSURES = PRESSURES
 RERUN_SEEDS = range(int(os.environ.get("COMPARE_RERUN_SEEDS", 1000)))
 RERUN_OLD_FOLDER = Path(os.environ.get("COMPARE_RERUN_OLD", "simOut_old_model_rerun"))
 RERUN_NEW_FOLDER = Path(os.environ.get("COMPARE_RERUN_NEW", "simOut_new_model_rerun"))
-RUN_SHARED_START = False  # the shared-start cell arrives with its own ticket
+
+# Shared start: legacy and anb from one t = 0 state, K replicas each, compared step by step over the window.
+# Tables and plots go to compare_out/shared_start/.
+RUN_SHARED_START = bool(int(os.environ.get("COMPARE_RUN_SHARED_START", 0)))
+SHARED_START_CONFIG = "adaptive-static"
+SHARED_START_PRESSURES = tuple(float(p) for p in os.environ.get("COMPARE_SHARED_START_PRESSURES", "4,16").split(","))
+SHARED_START_K = int(os.environ.get("COMPARE_SHARED_START_K", 20))
+SHARED_START_WINDOW = tuple(int(t) for t in os.environ.get("COMPARE_SHARED_START_WINDOW", "95,155").split(","))
+SHARED_START_SEED = 0
 
 # %%
 result = compare_folders(OLD_FOLDER, NEW_FOLDER, n_permutations=N_PERMUTATIONS, cache_dir=OUT_FOLDER / "cache")
@@ -221,3 +230,47 @@ if RUN_RERUN:
             adaptive_testbed(mu, pressure).save_ensemble(RERUN_SEEDS, RERUN_NEW_FOLDER, n_jobs=N_JOBS, skip_existing=True)
     rerun = compare_and_write(RERUN_OLD_FOLDER, RERUN_NEW_FOLDER, "rerun",
                         len(RERUN_MUS) * len(RERUN_PRESSURES) * len(RERUN_SEEDS))
+
+# %%
+# Shared-start divergence. Per pressure: the step-wise table (difference anb − legacy of the ensemble means with a
+# 95 % CI, KS p, BH q over steps × quantities), the first divergent step per quantity, and one plot of the
+# differences. A step with q < 0.05 is marked; a lone marked step among clean ones is likely a false discovery.
+if RUN_SHARED_START:
+    init_w, eps, mu, fixed = PAPER_CONFIGS[SHARED_START_CONFIG]
+    shared_cell = dict(link_prob=0.1, init_w=init_w, beta=3.0, rho=1 / 3, eps=eps, mu=mu, fixedBNat100=fixed, lam=0.0)
+    shared_folder = OUT_FOLDER / "shared_start"
+    shared_folder.mkdir(parents=True, exist_ok=True)
+    divergence_steps, first_divergence = [], []
+    for pressure in SHARED_START_PRESSURES:
+        trajectories = run_shared_start(shared_cell, pressure, SHARED_START_SEED, SHARED_START_K, SHARED_START_WINDOW,
+                                        n_jobs=N_JOBS)
+        divergence = compare_shared_start(trajectories)
+        divergence_steps.append(divergence.steps.assign(config=SHARED_START_CONFIG, pressure=pressure))
+        first_divergence.append(divergence.first_divergence.assign(config=SHARED_START_CONFIG, pressure=pressure))
+
+        fig, axs = plt.subplots(3, 5, figsize=(14, 7), sharex=True)
+        for ax, quantity in zip(axs.flat, SHARED_START_QUANTITIES):
+            rows = divergence.steps[divergence.steps.quantity == quantity]
+            ax.axhline(0, color="#7F7F7F", linewidth=0.8)
+            ax.plot(rows.t, rows["diff"], color="#0072B2")
+            ax.fill_between(rows.t, rows.ci_low, rows.ci_high, color="#0072B2", alpha=0.15, linewidth=0)
+            ax.plot(rows.t[rows.fail], rows["diff"][rows.fail], "o", markersize=3, color="#D55E00")
+            first = divergence.first_divergence.set_index("quantity").first_divergent_step[quantity]
+            if not np.isnan(first):
+                ax.axvline(first, color="#D55E00", linestyle="--", linewidth=0.8)
+            ax.set_title(quantity, fontsize=8)
+        for ax in axs.flat[len(SHARED_START_QUANTITIES):]:
+            ax.set_visible(False)
+        fig.suptitle(f"{SHARED_START_CONFIG}, pressure {pressure:g}: anb − legacy, K = {SHARED_START_K} "
+                     "(band 95 % CI, dots q < 0.05, dashed first divergent step)")
+        fig.supxlabel("t")
+        fig.savefig(shared_folder / f"divergence_{SHARED_START_CONFIG}_pressure{pressure:g}.png", dpi=200,
+                    bbox_inches="tight")
+        plt.close(fig)
+
+    for name, parts in {"divergence": divergence_steps, "first_divergence": first_divergence}.items():
+        table = pd.concat(parts, ignore_index=True)
+        table = table[["config", "pressure", *[c for c in table if c not in ("config", "pressure")]]]
+        table.to_csv(shared_folder / f"{name}.csv", index=False)
+        (shared_folder / f"{name}.md").write_text(markdown_table(table) + "\n")
+    print("Shared start, first divergent step:\n" + (shared_folder / "first_divergence.md").read_text())
