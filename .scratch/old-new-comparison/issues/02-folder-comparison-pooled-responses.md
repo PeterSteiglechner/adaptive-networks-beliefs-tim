@@ -13,12 +13,12 @@ The result holds the pairing report, the run-summary frames for both sides, and 
 
 **Blocked by:** #01
 
-**Status:** open
+**Status:** done
 
-- [ ] Synthetic ensemble-format CSVs in tmp folders (real legacy columns, t = 95.5 response dummies, a few seeds and cells) are the test fixture
-- [ ] Pairing is by filename, and files on one side only are listed in the pairing report without aborting
-- [ ] Filename parsing round-trips the paper configs, the μ sweep and the `fixedBNat100` token
-- [ ] Cells get paper-config labels or differing-parameter labels
-- [ ] An injected response shift in one cell flags exactly that cell in the pooled table
-- [ ] The table is ranked by Cramér's V, with BH q-values shown
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] Synthetic ensemble-format CSVs in tmp folders (real legacy columns, t = 95.5 response dummies, a few seeds and cells) are the test fixture
+- [x] Pairing is by filename, and files on one side only are listed in the pairing report without aborting
+- [x] Filename parsing round-trips the paper configs, the μ sweep and the `fixedBNat100` token
+- [x] Cells get paper-config labels or differing-parameter labels
+- [x] An injected response shift in one cell flags exactly that cell in the pooled table
+- [x] The table is ranked by Cramér's V, with BH q-values shown
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass

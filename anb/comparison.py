@@ -10,8 +10,14 @@ influence each other.
   a 95 % Welch CI for reading the size of any deviation.
 - Failures: Benjamini–Hochberg q < `ALPHA`, within each family (responses, metrics).
 
+`compare_folders` pairs the CSVs of two output folders by legacy filename and runs the response test per cell.
+
 Plain Python, no Numba.
 """
+
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -101,12 +107,14 @@ def correct(table: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def response_table(legacy: pd.DataFrame, new: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
+def response_table(legacy: pd.DataFrame, new: pd.DataFrame, rng: np.random.Generator,
+                   n_permutations: int = N_PERMUTATIONS) -> pd.DataFrame:
     rows = []
     for (config, pressure), old in legacy.groupby(["config", "pressure"], sort=False):
         cell = new[(new.config == config) & (new.pressure == pressure)]
         a, b = old[list(RESPONSES)].to_numpy(), cell[list(RESPONSES)].to_numpy()
-        row = {"config": config, "pressure": pressure, **compare_responses(a, b, rng)}
+        row = {"config": config, "pressure": pressure, **compare_responses(a, b, rng, n_permutations)}
+        row["cramers_v"] = float(np.sqrt(row["chi2"] / (a.sum() + b.sum())))  # 2 × K table: min(2, K) − 1 = 1
         for k, name in enumerate(RESPONSES):
             row[f"{name}_legacy"] = a[:, k].sum() / a.sum()
             row[f"{name}_anb"] = b[:, k].sum() / b.sum()
@@ -124,3 +132,97 @@ def metric_table(legacy: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
                 rows.append({"config": config, "pressure": pressure, "window": window, "metric": metric,
                              **compare_values(old[column], cell[column])})
     return correct(pd.DataFrame(rows))
+
+
+# Folder comparison
+
+_FILENAME = re.compile(
+    r"sim_link_prob(?P<link_prob>[\d.]+)_init_w(?P<init_w>[\d.]+)_beta(?P<beta>[\d.]+)_rho(?P<rho>[\d.]+)"
+    r"_eps(?P<eps>[\d.]+)_mu(?P<mu>[\d.]+)(?P<fixed>_fixedBNat100)?_ext_strength(?P<ext_strength>[\d.]+)"
+    r"_seed(?P<seed>\d+)(?P<events>_2events)?(?:_lambda(?P<lam>[\d.]+))?")
+
+# The paper's BN configurations (init_w, eps, mu, fixedBNat100) at the paper's fixed parameters (legacy `__main__`).
+PAPER_CONFIGS = {
+    "static0.2": (0.2, 0.0, 0.0, False),
+    "static0.8": (0.8, 0.0, 0.0, False),
+    "adaptive-static": (0.2, 1.0, 0.0, True),
+    "adaptive": (0.2, 1.0, 0.0, False),
+}
+_BASELINE = dict(link_prob=0.1, init_w=0.2, beta=3.0, rho=0.33, eps=1.0, mu=0.0, fixedBNat100=False, lam=0.0,
+                 n_events=1)  # the adaptive paper config; a filename holds rho to two decimals
+
+
+def parse_filename(name: str) -> tuple[dict, int]:
+    """Inverse of `legacy_filename`: a file name (with or without `.csv`) → (cell parameters, seed).
+
+    The cell holds every parameter except the seed, as `legacy_filename` takes them. Values are as rounded in
+    the name (`rho = 0.33`).
+    """
+    match = _FILENAME.fullmatch(name.removesuffix(".csv"))
+    if match is None:
+        raise ValueError(f"not a legacy ensemble file name: {name}")
+    g = match.groupdict()
+    ext = float(g["ext_strength"])
+    cell = dict(link_prob=float(g["link_prob"]), init_w=float(g["init_w"]), beta=float(g["beta"]),
+                rho=float(g["rho"]), eps=float(g["eps"]), mu=float(g["mu"]), fixedBNat100=g["fixed"] is not None,
+                ext_strength=int(ext) if ext.is_integer() else ext, lam=float(g["lam"] or 0.0),
+                n_events=2 if g["events"] else 1)
+    return cell, int(g["seed"])
+
+
+def cell_label(cell: dict) -> str:
+    """A paper config's name, else the parameters that differ from the adaptive config (the pressure doesn't count)."""
+    others = ("link_prob", "beta", "rho", "lam", "n_events")
+    if all(cell[k] == _BASELINE[k] for k in others):
+        for name, values in PAPER_CONFIGS.items():
+            if values == tuple(cell[k] for k in ("init_w", "eps", "mu", "fixedBNat100")):
+                return name
+    return ", ".join(f"{k}={cell[k]}" if k == "fixedBNat100" else f"{k}={cell[k]:g}"
+                     for k in _BASELINE if cell[k] != _BASELINE[k])
+
+
+@dataclass
+class Pairing:
+    """File stems (no `.csv`) found in both folders, and in one only."""
+    matched: list[str]
+    only_old: list[str]
+    only_new: list[str]
+
+
+@dataclass
+class Comparison:
+    """What `compare_folders` found: the pairing, one summary row per matched run and side, and the tables."""
+    pairing: Pairing
+    old: pd.DataFrame
+    new: pd.DataFrame
+    pooled_responses: pd.DataFrame = field(default_factory=pd.DataFrame)
+
+
+def _stems(folder: Path) -> set[str]:
+    return {path.stem for path in Path(folder).glob("sim_*.csv")}
+
+
+def _summaries(folder: Path, stems: list[str]) -> pd.DataFrame:
+    rows = []
+    for stem in stems:
+        cell, seed = parse_filename(stem)
+        summary = summarise_run(pd.read_csv(Path(folder) / f"{stem}.csv"))
+        rows.append({"config": cell_label(cell), "pressure": cell["ext_strength"], "seed": seed, **summary})
+    return pd.DataFrame(rows)
+
+
+def compare_folders(old: str | Path, new: str | Path, permutation_seed: int = 0,
+                    n_permutations: int = N_PERMUTATIONS) -> Comparison:
+    """Compare two ensemble output folders. Files are paired by name; those in one folder only are reported.
+
+    The pooled response table has one row per cell (config × pressure), ranked by Cramér's V, with the
+    Benjamini–Hochberg `q` of its permutation test alongside. Writes nothing.
+    """
+    in_old, in_new = _stems(old), _stems(new)
+    pairing = Pairing(sorted(in_old & in_new), sorted(in_old - in_new), sorted(in_new - in_old))
+    if not pairing.matched:
+        raise ValueError(f"no CSV files with the same name in {old} and {new}")
+    legacy, anb = _summaries(Path(old), pairing.matched), _summaries(Path(new), pairing.matched)
+    rng = np.random.default_rng(permutation_seed)
+    pooled = response_table(legacy, anb, rng, n_permutations)
+    return Comparison(pairing, legacy, anb, pooled.sort_values("cramers_v", ascending=False, ignore_index=True))
