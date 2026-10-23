@@ -1,6 +1,6 @@
 # Analysis Scripts
 
-The five `analyse_*.py` scripts read the simulation CSVs in `../simOut_old_model` and produce the paper's figures
+The five `analyse_*.py` scripts read the simulation CSVs in `../simOut` and produce the paper's figures
 and tables in `figs/`. Each script is organised into `# %%` cells, so it can be run as a whole
 (`uv run analyse_X.py`) or cell by cell in VS Code or Jupyter.
 

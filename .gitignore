@@ -1,7 +1,7 @@
-simOut/
+simOut*/
 .venv
 __pycache__/
 *.egg-info/
 .idea/
-simOut_old_model/
-figs/
+.scratch/*
+figs/*

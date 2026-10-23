@@ -14,6 +14,7 @@ import time
 from joblib import Parallel, delayed
 import multiprocessing
 import igraph as ig
+import time
 
 # FIXED PARAMETERS
 M = 10
@@ -535,6 +536,7 @@ def run_one(seed, link_prob, init_w, beta, rho, eps, mu, fixedBNat100, ext_stren
 # %%
 # Main execution
 if __name__ == "__main__":
+    sart_time = time.time()
     link_prob = 10 / n_agents
     # init_w = 0.2
     beta = 3.0
@@ -543,16 +545,18 @@ if __name__ == "__main__":
     # mu = 0.0
     # ext_strength = 4
 
-    param_combis = [
-        [link_prob, init_w, beta, rho, eps, mu, fixedBNat100]
-        for init_w, eps, mu, fixedBNat100 in [
-            (0.2, 0.0, 0.0, False),    # static, low edge weights
-            (0.8, 0.0, 0.0, False),    # static, high edge weights
-            (0.2, 1.0, 0.0, True),    # adaptive until external pressure
-            (0.2, 1.0, 0.0, False),    # fully adaptive, strong edge weights
-        ]
-    ]
-    
+    param_combis = [[link_prob, 0.2, beta, rho, 1.0, 0.0, False]]   # adaptive only
+
+    # param_combis = [
+    #     [link_prob, init_w, beta, rho, eps, mu, fixedBNat100]
+    #     for init_w, eps, mu, fixedBNat100 in [
+    #         (0.2, 0.0, 0.0, False),    # static, low edge weights
+    #         (0.8, 0.0, 0.0, False),    # static, high edge weights
+    #         (0.2, 1.0, 0.0, True),    # adaptive until external pressure
+    #         (0.2, 1.0, 0.0, False),    # fully adaptive, strong edge weights
+    #     ]
+    # ]
+
     # eps = 1.0
     # init_w=0.2
     # fixedBNat100 = False
@@ -568,9 +572,9 @@ if __name__ == "__main__":
         p + [ext_strength] for p in param_combis for ext_strength in pressures
     ]
 
-    seeds = list(range(0, 10))  ## TODO increase
+    seeds = [1,2] #list(range(0, 100))  ## TODO increase
 
-    detail = False
+    detail = True
     track_times = (
         np.arange(T + 1)
         if detail
@@ -598,6 +602,9 @@ if __name__ == "__main__":
             )
             for link_prob, init_w, beta, rho, eps, mu, fixedBNat100, ext_strength, seed in param_combis_withSeed
         )
+    
+    end_time = time.time()
+    print(f"Total time: {end_time - sart_time:.2f} seconds")
 
 
 # %%
