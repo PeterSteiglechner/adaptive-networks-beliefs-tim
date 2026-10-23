@@ -7,6 +7,7 @@ same name (`COMPARE_OLD`, ...), which the smoke test uses.
 import os
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from anb.comparison import compare_folders
@@ -35,7 +36,7 @@ TABLES = {
 
 def markdown_table(table: pd.DataFrame) -> str:
     """A GitHub markdown table; floats to 4 significant digits."""
-    cells = table.map(lambda v: f"{v:.4g}" if isinstance(v, float) else str(v))
+    cells = table.map(lambda v: f"{v:.4g}" if isinstance(v, (float, np.floating)) else str(v).replace("|", "\\|"))
     lines = ["| " + " | ".join(cells.columns) + " |", "|" + "---|" * len(cells.columns)]
     lines += ["| " + " | ".join(row) + " |" for row in cells.itertuples(index=False)]
     return "\n".join(lines)
@@ -49,7 +50,7 @@ def file_list(stems: list[str], limit: int = 20) -> str:
 def summary_markdown() -> str:
     pairing = result.pairing
     families = pd.DataFrame(
-        [{"family": name, "tests": len(table), "failing (q < 0.05)": int(table.fail.sum())}
+        [{"family": name, "tests": len(table), "failing (q < 0.05)": int(table.fail.sum()) if "fail" in table else 0}
          for name, table in TABLES.items() if name != "top_differences"])
     top = result.top_differences.head(TOP_K)
     return "\n".join([
