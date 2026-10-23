@@ -10,9 +10,9 @@
 
 **Blocked by:** #03
 
-**Status:** open
+**Status:** done
 
-- [ ] Running the script on two folders produces all the tables and the markdown summary in `compare_out/`
-- [ ] The markdown summary lists the failing tests per family, the top effects and the one-sided files
-- [ ] `compare_out/` is git-ignored
-- [ ] A smoke test runs the script on the synthetic folders and checks the files exist (like the notebook smoke test)
+- [x] Running the script on two folders produces all the tables and the markdown summary in `compare_out/`
+- [x] The markdown summary lists the failing tests per family, the top effects and the one-sided files
+- [x] `compare_out/` is git-ignored
+- [x] A smoke test runs the script on the synthetic folders and checks the files exist (like the notebook smoke test)

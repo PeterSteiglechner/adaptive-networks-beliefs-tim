@@ -1,6 +1,9 @@
 """`anb.comparison.compare_folders` on synthetic ensemble-format CSVs: pairing, cell parsing and the pooled table."""
 
 import os
+import subprocess
+import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -359,3 +362,24 @@ def test_unreadable_cache_files_are_rebuilt(tmp_path, csv_reads):
 
     assert len(csv_reads) == 16
     pd.testing.assert_frame_equal(expected.old, result.old)
+
+
+def test_the_report_script_writes_every_table_and_a_summary(tmp_path):
+    rng = np.random.default_rng(5)
+    old, new, out = tmp_path / "old", tmp_path / "new", tmp_path / "out"
+    write_cell(old, params(), UNIFORM, rng, seeds=range(10))
+    write_cell(new, params(), SHIFTED, rng, seeds=range(1, 11))
+    script = Path(__file__).parents[1] / "compare_old_new.py"
+    env = {**os.environ, "COMPARE_OLD": str(old), "COMPARE_NEW": str(new), "COMPARE_OUT": str(out),
+           "COMPARE_N_PERMUTATIONS": "100"}
+
+    proc = subprocess.run([sys.executable, str(script)], cwd=tmp_path, env=env, capture_output=True, text=True,
+                          timeout=300)
+
+    assert proc.returncode == 0, proc.stderr
+    for name in ("pooled_responses", "conditional_responses", "lean", "metrics", "top_differences"):
+        assert (out / f"{name}.csv").exists() and (out / f"{name}.md").exists()
+    summary = (out / "summary.md").read_text()
+    assert "Failing tests per family" in summary and "Top 10 effects" in summary
+    assert legacy_filename(params(seed=0), False) in summary  # the file only in old
+    assert legacy_filename(params(seed=10), False) in summary  # the file only in new

@@ -3,5 +3,6 @@ simOut*/
 __pycache__/
 *.egg-info/
 .idea/
-.scratch/*
+
 figs/*
+compare_out/
