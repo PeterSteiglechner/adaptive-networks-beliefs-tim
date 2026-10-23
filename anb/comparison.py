@@ -198,6 +198,9 @@ _BASELINE = dict(link_prob=0.1, init_w=0.2, beta=3.0, rho=0.33, eps=1.0, mu=0.0,
                  n_events=1)  # the adaptive paper config; a filename holds rho to two decimals
 
 
+SUMMARY_CELL_COLUMNS = ("config", "pressure", "mu", "seed")  # what a summary row carries from its file name
+
+
 def parse_filename(name: str) -> tuple[dict, int]:
     """Inverse of `legacy_filename`: a file name (with or without `.csv`) → (cell parameters, seed).
 
@@ -260,7 +263,7 @@ def _summarise_file(path: Path) -> dict:
 def _cell_key(folder: Path, stems: list[str]) -> str:
     """Identifies a cell's files and their state (names, modification times, sizes) and what a summary holds, so
     a change to the folder or to the summarised columns misses the cache."""
-    parts = [str(folder.resolve()), repr((METRICS, WINDOWS, RESPONSES))]
+    parts = [str(folder.resolve()), repr((METRICS, WINDOWS, RESPONSES, SUMMARY_CELL_COLUMNS))]
     for stem in stems:
         stat = (folder / f"{stem}.csv").stat()
         parts.append(f"{stem}:{stat.st_mtime_ns}:{stat.st_size}")
@@ -293,7 +296,8 @@ def _summaries(folder: Path, stems: list[str], cache_dir: Path | None = None, n_
     rows: dict[str, list[dict]] = {name: [] for name in todo}
     for (name, stem), summary in zip(jobs, summaries):
         cell, seed = parse_filename(stem)
-        rows[name].append({"config": cell_label(cell), "pressure": cell["ext_strength"], "seed": seed, **summary})
+        rows[name].append({"config": cell_label(cell), "pressure": cell["ext_strength"], "mu": cell["mu"], "seed": seed,
+                     **summary})
     for name, entry in todo.items():
         frames[name] = pd.DataFrame(rows[name])
         if entry is not None:
@@ -331,6 +335,48 @@ def compare_folders(old: str | Path, new: str | Path, permutation_seed: int = 0,
     metrics = metrics.iloc[(-metrics.smd.abs()).argsort(kind="stable")].reset_index(drop=True)
     return Comparison(pairing, legacy, anb, pooled, conditional, lean, metrics,
                       _top_differences(pooled, conditional, lean, metrics))
+
+
+# Plot data
+
+def response_shares(summaries: pd.DataFrame, categories: tuple[str, ...] = RESPONSES, n_boot: int = 1000,
+                    rng: np.random.Generator | None = None) -> pd.DataFrame:
+    """Pooled shares of `categories` per cell, with a 95 % percentile band from bootstrapping whole runs.
+
+    One row per (config, pressure, mu, response): `share` (agents of the response / agents in `categories`),
+    `low` and `high`. Resampling runs, not agents, keeps the within-run correlation in the band.
+    """
+    rng = rng or np.random.default_rng(0)
+    rows = []
+    for (config, pressure, mu), cell in summaries.groupby(["config", "pressure", "mu"], sort=False):
+        counts = cell[list(categories)].to_numpy(dtype=float)
+        picks = rng.integers(len(counts), size=(n_boot, len(counts)))
+        boot = counts[picks].sum(axis=1)
+        boot = boot / boot.sum(axis=1, keepdims=True)
+        low, high = np.nanpercentile(boot, [2.5, 97.5], axis=0)
+        share = counts.sum(axis=0) / counts.sum()
+        rows += [{"config": config, "pressure": pressure, "mu": mu, "response": name, "share": share[k],
+                  "low": low[k], "high": high[k]} for k, name in enumerate(categories)]
+    return pd.DataFrame(rows)
+
+
+def metric_series(summaries: pd.DataFrame, metric: str) -> pd.DataFrame:
+    """The run mean of `metric` at each tracked step: `t`, `mean` and `se` (over runs), per cell in `summaries`."""
+    pattern = re.compile(rf"{re.escape(metric)}@t(\d+)")
+    steps = {int(m.group(1)): column for column in summaries if (m := pattern.fullmatch(column))}
+    rows = []
+    for (config, pressure), cell in summaries.groupby(["config", "pressure"], sort=False):
+        for t in sorted(steps):
+            values = cell[steps[t]].dropna()
+            rows.append({"config": config, "pressure": pressure, "t": t, "mean": values.mean(),
+                         "se": values.std(ddof=1) / np.sqrt(len(values)) if len(values) > 1 else np.nan})
+    return pd.DataFrame(rows)
+
+
+def top_cells(top_differences: pd.DataFrame, k: int) -> list[tuple[str, float]]:
+    """The first `k` distinct (config, pressure) cells in the ranked `top_differences` table."""
+    cells = top_differences[["config", "pressure"]].drop_duplicates().head(k)
+    return [(config, pressure) for config, pressure in cells.itertuples(index=False)]
 
 
 def _top_differences(pooled, conditional, lean, metrics) -> pd.DataFrame:

@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from anb.comparison import METRICS, RESPONSES, WINDOWS, cell_label, compare_folders, parse_filename
+from anb.comparison import (METRICS, NEGATIVE_RESPONSES, RESPONSES, WINDOWS, cell_label, compare_folders, metric_series,
+                            parse_filename, response_shares, top_cells)
 from anb.io import legacy_filename
 from anb.metrics import RESPONSE_COLUMNS
 
@@ -369,6 +370,8 @@ def test_the_report_script_writes_every_table_and_a_summary(tmp_path):
     old, new, out = tmp_path / "old", tmp_path / "new", tmp_path / "out"
     write_cell(old, params(), UNIFORM, rng, seeds=range(10))
     write_cell(new, params(), SHIFTED, rng, seeds=range(1, 11))
+    for folder in (old, new):
+        write_cell(folder, params(mu=0.1), UNIFORM, rng, seeds=range(5))
     script = Path(__file__).parents[1] / "compare_old_new.py"
     env = {**os.environ, "COMPARE_OLD": str(old), "COMPARE_NEW": str(new), "COMPARE_OUT": str(out),
            "COMPARE_N_PERMUTATIONS": "100"}
@@ -383,3 +386,65 @@ def test_the_report_script_writes_every_table_and_a_summary(tmp_path):
     assert "Failing tests per family" in summary and "Top 10 effects" in summary
     assert legacy_filename(params(seed=0), False) in summary  # the file only in old
     assert legacy_filename(params(seed=10), False) in summary  # the file only in new
+    for name in ("response_shares_pooled.png", "response_shares_conditional_mu.png"):
+        assert (out / name).stat().st_size > 0
+    assert (out / "timeseries_adaptive_pressure4.png").stat().st_size > 0
+
+
+def test_response_shares_carry_a_run_level_band_around_the_pooled_share(tmp_path):
+    rng = np.random.default_rng(6)
+    old, new = tmp_path / "old", tmp_path / "new"
+    write_cell(old, params(), UNIFORM, rng, seeds=range(30))
+    write_cell(new, params(), UNIFORM, rng, seeds=range(30))
+    summaries = compare_folders(old, new, n_permutations=50, n_jobs=1).old
+
+    shares = response_shares(summaries, n_boot=200, rng=np.random.default_rng(0))
+
+    assert set(shares.response) == set(RESPONSES)
+    assert list(shares.groupby(["config", "pressure"]).share.sum().round(9)) == [1.0]
+    assert ((shares.low <= shares.share) & (shares.share <= shares.high) & (shares.high > shares.low)).all()
+    assert (shares.mu == 0).all()
+
+
+def test_conditional_response_shares_cover_the_negative_classes_only(tmp_path):
+    rng = np.random.default_rng(7)
+    old, new = tmp_path / "old", tmp_path / "new"
+    write_cell(old, params(mu=0.1), UNIFORM, rng, seeds=range(5))
+    write_cell(new, params(mu=0.1), UNIFORM, rng, seeds=range(5))
+    summaries = compare_folders(old, new, n_permutations=50, n_jobs=1).old
+
+    shares = response_shares(summaries, NEGATIVE_RESPONSES, n_boot=50, rng=np.random.default_rng(0))
+
+    assert set(shares.response) == set(NEGATIVE_RESPONSES)
+    assert (shares.mu == 0.1).all()
+    assert shares.share.sum() == pytest.approx(1.0)
+
+
+def test_metric_series_give_the_mean_and_se_over_runs_per_tracked_step(tmp_path):
+    rng = np.random.default_rng(8)
+    old, new = tmp_path / "old", tmp_path / "new"
+    write_cell(old, params(), UNIFORM, rng, seeds=range(6))
+    write_cell(new, params(), UNIFORM, rng, seeds=range(6))
+    summaries = compare_folders(old, new, n_permutations=50, n_jobs=1).old
+
+    series = metric_series(summaries, "x_focal")
+
+    assert list(series.t) == [50]  # the synthetic runs track one step
+    values = summaries["x_focal@t50"]
+    assert series["mean"].iloc[0] == pytest.approx(values.mean())
+    assert series.se.iloc[0] == pytest.approx(values.std(ddof=1) / np.sqrt(len(values)))
+
+
+def test_top_cells_come_from_the_ranked_table_without_repeats(tmp_path):
+    rng = np.random.default_rng(9)
+    old, new = tmp_path / "old", tmp_path / "new"
+    for cell, shares in [(params(ext_strength=0), UNIFORM), (params(ext_strength=2), SHIFTED),
+                         (params(ext_strength=1), np.array([0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.3]))]:
+        write_cell(old, cell, UNIFORM, rng)
+        write_cell(new, cell, shares, rng)
+
+    top = compare_folders(old, new, n_permutations=100, n_jobs=1).top_differences
+
+    cells = top_cells(top, 2)
+    assert cells[0] == ("adaptive", 2)
+    assert len(cells) == len(set(cells)) == 2
