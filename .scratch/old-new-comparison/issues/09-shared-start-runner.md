@@ -14,12 +14,12 @@ The runner takes a cell (parameters), a pressure, a start seed, K, a step window
 
 **Blocked by:** #01
 
-**Status:** open
+**Status:** done
 
-- [ ] There is a single legacy ↔ `AgentState` conversion, which the oracle imports
-- [ ] Both implementations report identical t = 0 metrics from the shared state
-- [ ] Replicas within one implementation differ after t = 0
-- [ ] The trajectory frame has the expected columns and covers every step of the window for each implementation and replica
-- [ ] `ANBmodel.py` on disk is unchanged, and `Testbed` is not modified
-- [ ] Tests use a short run (small window, K = 2) and are marked `slow` if needed
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] There is a single legacy ↔ `AgentState` conversion, which the oracle imports
+- [x] Both implementations report identical t = 0 metrics from the shared state
+- [x] Replicas within one implementation differ after t = 0
+- [x] The trajectory frame has the expected columns and covers every step of the window for each implementation and replica
+- [x] `ANBmodel.py` on disk is unchanged, and `Testbed` is not modified
+- [x] Tests use a short run (small window, K = 2) and are marked `slow` if needed
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
