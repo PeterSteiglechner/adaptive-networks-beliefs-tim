@@ -1,8 +1,8 @@
 # %%
 """Compare two ensemble output folders (legacy vs `anb`, or any two sweeps) and write the tables to `compare_out/`.
 
-Run it as a plain script or cell by cell. The constants below can be overridden by environment variables of the
-same name (`COMPARE_OLD`, ...), which the smoke test uses.
+Run it as a plain script or cell by cell. Most constants below can be overridden by a `COMPARE_*` environment
+variable (`OLD_FOLDER` by `COMPARE_OLD`, ...), which the smoke tests use; the others are edited here.
 """
 import os
 import re
@@ -12,13 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from anb.agents import ANBAgent
 from anb.comparison import (METRICS, NEGATIVE_RESPONSES, PAPER_CONFIGS, RESPONSES, SHARED_START_QUANTITIES,
-                            compare_folders, compare_shared_start, metric_series, response_shares, run_shared_start,
-                            save_under_legacy_names, top_cells)
-from anb.model import ModelSpec
-from anb.networks import ErdosRenyiNetwork
-from anb.testbed import PressureSchedule, Testbed, TestbedConfig
+                            Comparison, cell_testbed, compare_folders, compare_shared_start, metric_series,
+                            paper_cell, response_shares, run_shared_start, save_under_legacy_names, top_cells)
 
 # %%
 OLD_FOLDER = Path(os.environ.get("COMPARE_OLD", "simOut_old_model"))
@@ -56,16 +52,14 @@ SHARED_START_WINDOW = tuple(int(t) for t in os.environ.get("COMPARE_SHARED_START
 SHARED_START_SEED = 0
 
 # %%
-result = compare_folders(OLD_FOLDER, NEW_FOLDER, n_permutations=N_PERMUTATIONS, cache_dir=OUT_FOLDER / "cache")
+result = compare_folders(OLD_FOLDER, NEW_FOLDER, n_permutations=N_PERMUTATIONS, cache_dir=OUT_FOLDER / "cache",
+                         n_jobs=N_JOBS)
+
 
 # %%
-TABLES = {
-    "pooled_responses": result.pooled_responses,
-    "conditional_responses": result.conditional_responses,
-    "lean": result.lean,
-    "metrics": result.metrics,
-    "top_differences": result.top_differences,
-}
+def tables(res: Comparison) -> dict[str, pd.DataFrame]:
+    return {"pooled_responses": res.pooled_responses, "conditional_responses": res.conditional_responses,
+            "lean": res.lean, "metrics": res.metrics, "top_differences": res.top_differences}
 
 
 def markdown_table(table: pd.DataFrame) -> str:
@@ -81,28 +75,34 @@ def file_list(stems: list[str], limit: int = 20) -> str:
     return shown + (f"\n- … and {len(stems) - limit} more" if len(stems) > limit else "") if stems else "none"
 
 
-def summary_markdown() -> str:
-    pairing = result.pairing
+def summary_markdown(res: Comparison, old: Path, new: Path) -> str:
+    pairing = res.pairing
     families = pd.DataFrame(
-        [{"family": name, "tests": len(table), "failing (q < 0.05)": int(table.fail.sum()) if "fail" in table else 0}
-         for name, table in TABLES.items() if name != "top_differences"])
-    top = result.top_differences.head(TOP_K)
+        [{"family": name, "tests": len(table), "untested (p NaN)": int(table.p.isna().sum()),
+          "failing (q < 0.05)": int(table.fail.sum())}
+         for name, table in tables(res).items() if name != "top_differences"])
     return "\n".join([
         "# Old vs new comparison", "",
-        f"Old: `{OLD_FOLDER}`, new: `{NEW_FOLDER}`. {len(pairing.matched)} files matched.", "",
-        "## Files in one folder only", "",
+        f"Old: `{old}`, new: `{new}`. {len(pairing.matched)} files matched.", "",
+        "## Files not compared", "",
         f"Only in old ({len(pairing.only_old)}):", "", file_list(pairing.only_old), "",
         f"Only in new ({len(pairing.only_new)}):", "", file_list(pairing.only_new), "",
+        f"In both, but not legacy ensemble names ({len(pairing.unparsed)}):", "", file_list(pairing.unparsed), "",
         "## Failing tests per family", "", markdown_table(families), "",
-        f"## Top {TOP_K} effects", "", markdown_table(top), ""])
+        f"## Top {TOP_K} effects", "", markdown_table(res.top_differences.head(TOP_K)), ""])
+
+
+def write_report(res: Comparison, old: Path, new: Path, folder: Path) -> None:
+    """Every table as CSV and markdown, plus `summary.md`, into `folder`."""
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, table in tables(res).items():
+        table.to_csv(folder / f"{name}.csv", index=False)
+        (folder / f"{name}.md").write_text(markdown_table(table) + "\n")
+    (folder / "summary.md").write_text(summary_markdown(res, old, new))
 
 
 # %%
-OUT_FOLDER.mkdir(parents=True, exist_ok=True)
-for name, table in TABLES.items():
-    table.to_csv(OUT_FOLDER / f"{name}.csv", index=False)
-    (OUT_FOLDER / f"{name}.md").write_text(markdown_table(table) + "\n")
-(OUT_FOLDER / "summary.md").write_text(summary_markdown())
+write_report(result, OLD_FOLDER, NEW_FOLDER, OUT_FOLDER)
 print((OUT_FOLDER / "summary.md").read_text())
 
 # %%
@@ -193,21 +193,10 @@ for config, pressure in top_cells(result.top_differences, TOP_K):
 
 # %%
 # Ablation and rerun cells. Both save a normal output folder and go through `compare_folders`; their tables are
-# written to `compare_out/<name>/`.
-def adaptive_testbed(mu: float, pressure: float, learning_until: int | None = None) -> Testbed:
-    agent = ANBAgent(beta=3.0, eps=1.0, mu=mu, init_w=0.2, learning_until=learning_until)
-    spec = ModelSpec(agent, ErdosRenyiNetwork, {"link_prob": 0.1}, n_agents=100, rho=1 / 3)
-    return Testbed(spec, TestbedConfig(PressureSchedule.single_event(pressure)))
-
-
-def compare_and_write(old: Path, new: Path, name: str, expected_files: int):
-    folder = OUT_FOLDER / name
-    folder.mkdir(parents=True, exist_ok=True)
+# written to `compare_out/<name>/`, with a `summary.md` like the main one.
+def compare_and_write(old: Path, new: Path, name: str, expected_files: int) -> Comparison:
     res = compare_folders(old, new, n_permutations=N_PERMUTATIONS, cache_dir=OUT_FOLDER / "cache", n_jobs=N_JOBS)
-    for table_name, table in {"pooled_responses": res.pooled_responses, "conditional_responses": res.conditional_responses,
-                              "lean": res.lean, "metrics": res.metrics, "top_differences": res.top_differences}.items():
-        table.to_csv(folder / f"{table_name}.csv", index=False)
-        (folder / f"{table_name}.md").write_text(markdown_table(table) + "\n")
+    write_report(res, old, new, OUT_FOLDER / name)
     assert len(res.pairing.matched) == expected_files and not res.pairing.only_new, (
         f"{name}: {len(res.pairing.matched)} of {expected_files} files paired, {len(res.pairing.only_new)} only in new")
     print(f"{name}: {len(res.pairing.matched)} files matched\n" + markdown_table(res.top_differences.head(TOP_K)))
@@ -217,7 +206,7 @@ def compare_and_write(old: Path, new: Path, name: str, expected_files: int):
 # %%
 if RUN_ABLATIONS:
     for pressure in PRESSURES:
-        bed = adaptive_testbed(mu=0.0, pressure=pressure, learning_until=ABLATION_LEARNING_UNTIL)
+        bed = cell_testbed(paper_cell("adaptive-static"), pressure, learning_until=ABLATION_LEARNING_UNTIL)
         save_under_legacy_names(bed, ABLATION_SEEDS, ABLATION_FOLDER, n_jobs=N_JOBS, fixedBNat100=True)
     ablation = compare_and_write(OLD_FOLDER, ABLATION_FOLDER, "ablation_learning_until",
                                 len(PRESSURES) * len(ABLATION_SEEDS))
@@ -227,7 +216,8 @@ if RUN_ABLATIONS:
 if RUN_RERUN:
     for mu in RERUN_MUS:
         for pressure in RERUN_PRESSURES:
-            adaptive_testbed(mu, pressure).save_ensemble(RERUN_SEEDS, RERUN_NEW_FOLDER, n_jobs=N_JOBS, skip_existing=True)
+            cell_testbed(paper_cell("adaptive", mu=mu), pressure).save_ensemble(RERUN_SEEDS, RERUN_NEW_FOLDER,
+                                                                                n_jobs=N_JOBS, skip_existing=True)
     rerun = compare_and_write(RERUN_OLD_FOLDER, RERUN_NEW_FOLDER, "rerun",
                         len(RERUN_MUS) * len(RERUN_PRESSURES) * len(RERUN_SEEDS))
 
@@ -236,8 +226,7 @@ if RUN_RERUN:
 # 95 % CI, KS p, BH q over steps × quantities), the first divergent step per quantity, and one plot of the
 # differences. A step with q < 0.05 is marked; a lone marked step among clean ones is likely a false discovery.
 if RUN_SHARED_START:
-    init_w, eps, mu, fixed = PAPER_CONFIGS[SHARED_START_CONFIG]
-    shared_cell = dict(link_prob=0.1, init_w=init_w, beta=3.0, rho=1 / 3, eps=eps, mu=mu, fixedBNat100=fixed, lam=0.0)
+    shared_cell = paper_cell(SHARED_START_CONFIG)
     shared_folder = OUT_FOLDER / "shared_start"
     shared_folder.mkdir(parents=True, exist_ok=True)
     divergence_steps, first_divergence = [], []

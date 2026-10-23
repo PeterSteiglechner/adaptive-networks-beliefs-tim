@@ -35,6 +35,11 @@ class ModelSpec:
         self.agent.param_arrays(n)  # raises on per-agent parameters of the wrong length
         state = self.agent.init_state(n, rng)
         network = self.network_cls.build(n, rng, **self.network_kwargs)
+        return self.checked_model(state, network)
+
+    def checked_model(self, state: AgentState, network: Network) -> ANBModel:
+        """`ANBModel` of `state` on `network`, after checking both against `n_agents`."""
+        n = self.n_agents
         if state.n_agents != n:
             raise ValueError(f"agent state has {state.n_agents} agents, spec has n_agents={n}")
         if network.adjacency.shape != (n, n):

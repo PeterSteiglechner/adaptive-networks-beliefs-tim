@@ -8,8 +8,9 @@ import numpy as np
 import pytest
 
 import legacy_oracle
-from anb.comparison import (METRICS, build_shared_start, legacy_rows_from_state, run_shared_start,
-                            state_from_legacy_rows)
+from anb.comparison import (METRICS, SharedStartSpec, anb_agent, build_shared_start, legacy_rows_from_state,
+                            run_shared_start, state_from_legacy_rows)
+from anb.networks import ErdosRenyiNetwork
 from anb.testbed import PressureSchedule
 
 CELL = dict(link_prob=0.1, init_w=0.2, beta=3.0, rho=0.33, eps=1.0, mu=0.0, fixedBNat100=False, lam=0.0)
@@ -70,6 +71,16 @@ def test_the_start_state_depends_on_the_start_seed_only():
     np.testing.assert_array_equal(a[0].beliefs, b[0].beliefs)
     np.testing.assert_array_equal(a[1], b[1])
     assert not np.array_equal(a[0].beliefs, c[0].beliefs)
+
+
+@pytest.mark.parametrize("n_agents, size", [(100, 50), (50, 100)])
+def test_a_shared_start_that_doesnt_fit_the_spec_is_rejected_before_the_sweep(n_agents, size):
+    state, adjacency = build_shared_start(CELL, 0)
+    spec = SharedStartSpec(anb_agent(CELL), ErdosRenyiNetwork, {"link_prob": 0.1}, n_agents, 0.33, state,
+                           adjacency[:size, :size])
+
+    with pytest.raises(ValueError, match="adjacency|agents"):
+        spec.build(np.random.default_rng(0))
 
 
 def test_running_leaves_legacy_on_disk_unchanged():

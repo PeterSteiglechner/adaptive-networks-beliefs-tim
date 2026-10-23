@@ -150,6 +150,33 @@ def test_folders_without_common_files_are_an_error(tmp_path):
         compare_folders(old, new)
 
 
+def test_a_paired_file_without_a_legacy_name_is_reported_and_not_read(tmp_path, csv_reads):
+    rng = np.random.default_rng(12)
+    old, new = tmp_path / "old", tmp_path / "new"
+    for folder in (old, new):
+        write_cell(folder, params(), UNIFORM, rng, seeds=range(3))
+        (folder / "sim_custom_run.csv").write_text("not a run\n")
+
+    result = compare_folders(old, new, n_permutations=20, n_jobs=1)
+
+    assert result.pairing.unparsed == ["sim_custom_run"]
+    assert len(result.pairing.matched) == 3 and len(csv_reads) == 6
+
+
+def test_a_cell_with_one_run_on_a_side_is_untested_but_the_others_still_fail(tmp_path):
+    rng = np.random.default_rng(13)
+    old, new = tmp_path / "old", tmp_path / "new"
+    write_cell(old, params(ext_strength=0), UNIFORM, rng, seeds=[0])
+    write_cell(new, params(ext_strength=0), UNIFORM, rng, seeds=[0])
+    write_cell(old, params(ext_strength=16), LEAN_OLD, rng, seeds=range(30))
+    write_cell(new, params(ext_strength=16), LEAN_NEW, rng, seeds=range(30))
+
+    lean = compare_folders(old, new, n_permutations=50, n_jobs=1).lean
+
+    assert lean[lean.pressure == 0].q.isna().all()
+    assert lean[(lean.pressure == 16) & (lean.quantity == "share positive")].fail.all()
+
+
 # Conditional responses, lean, metrics and the combined table
 
 # Positive-before shares move (0.5 → 0.8) while the split among the negative-before classes stays put.
@@ -171,7 +198,8 @@ def test_conditional_counts_and_the_lean_come_from_the_labels_of_a_hand_built_ru
     assert row.lean == pytest.approx(8 / 20)
     assert row["x_focal@t50"] == pytest.approx(
         pd.read_csv(next((tmp_path / "old").glob("*.csv"))).query("t == 50").x_focal.mean())
-    assert len(result.conditional_responses) == 1 and len(result.lean) == 1
+    assert len(result.conditional_responses) == 1
+    assert sorted(result.lean.quantity) == ["share positive", "x_focal@before"]
 
 
 def test_a_lean_only_shift_is_flagged_in_lean_and_pooled_but_not_conditional(tmp_path):
@@ -186,11 +214,24 @@ def test_a_lean_only_shift_is_flagged_in_lean_and_pooled_but_not_conditional(tmp
 
     result = compare_folders(old, new, n_permutations=500)
 
-    assert list(result.lean[result.lean.fail].pressure) == [16]
+    lean = result.lean[result.lean.quantity == "share positive"]
+    assert list(lean[lean.fail].pressure) == [16]
     assert list(result.pooled_responses[result.pooled_responses.fail].pressure) == [16]
     assert not result.conditional_responses.fail.any()
-    lean_row = result.lean[result.lean.pressure == 16].iloc[0]
-    assert lean_row.lean_legacy < lean_row.lean_anb and lean_row.gap_se > 3 and "ks" not in result.lean.columns
+    lean_row = lean[lean.pressure == 16].iloc[0]
+    assert lean_row.mean_legacy < lean_row.mean_anb and lean_row.gap_se > 3 and "ks" not in result.lean.columns
+
+
+def test_an_x_focal_shift_before_pressure_is_flagged_in_the_lean_table(tmp_path):
+    rng = np.random.default_rng(11)
+    old, new = tmp_path / "old", tmp_path / "new"
+    for cell in (params(ext_strength=0), params(ext_strength=4)):
+        write_cell(old, cell, UNIFORM, rng)
+        write_cell(new, cell, UNIFORM, rng, shift=("before", "x_focal", 2.0) if cell["ext_strength"] else None)
+
+    lean = compare_folders(old, new, n_permutations=50, n_jobs=1).lean
+
+    assert list(zip(lean[lean.fail].pressure, lean[lean.fail].quantity)) == [(4, "x_focal@before")]
 
 
 def test_a_conditional_shift_is_flagged_in_the_conditional_table(tmp_path):
@@ -312,7 +353,25 @@ def test_changing_a_cell_rebuilds_only_that_cell(tmp_path, csv_reads, change):
 
     mu_cell = [r for r in csv_reads if "mu0.100" in str(r)]
     assert len(mu_cell) == len(csv_reads) > 0  # the other cell stays cached
-    assert len(csv_reads) == {"touch": 4, "add": 10, "remove": 6}[change]
+    # remove: only old's cell changed; new's cell is cached with all its runs, the unpaired one included
+    assert len(csv_reads) == {"touch": 4, "add": 10, "remove": 3}[change]
+
+
+def test_partners_with_different_seeds_share_the_cache_of_a_folder(tmp_path, csv_reads):
+    rng = np.random.default_rng(14)
+    old, full, part = tmp_path / "old", tmp_path / "full", tmp_path / "part"
+    write_cell(old, params(), UNIFORM, rng, seeds=range(6))
+    write_cell(full, params(), UNIFORM, rng, seeds=range(6))
+    write_cell(part, params(), UNIFORM, rng, seeds=range(2))
+    cache = tmp_path / "cache"
+    compare(old, full, cache)
+    compare(old, part, cache)
+    csv_reads.clear()
+
+    first, second = compare(old, full, cache), compare(old, part, cache)
+
+    assert csv_reads == []
+    assert sorted(first.old.seed) == list(range(6)) and sorted(second.old.seed) == [0, 1]
 
 
 def test_results_are_the_same_with_and_without_the_cache(tmp_path):

@@ -9,10 +9,11 @@ influence each other.
 - Metrics, per cell × window × metric: two-sample KS test on the run means, plus the difference of means with
   a 95 % Welch CI for reading the size of any deviation.
 - Conditional responses: the same χ² test on the four classes of agents negative before pressure.
-- Lean, per cell: Welch on the run-level share positive before pressure (no KS, the distribution is bimodal).
+- Lean, per cell: Welch on the run-level share positive before pressure and on the run mean of `x_focal` before
+  pressure (no KS, both distributions are bimodal).
 - Failures: Benjamini–Hochberg q < `ALPHA`, within each family (pooled responses, conditional responses, lean,
   metrics). Tables are ranked by effect size: Cramér's V for responses, the standardised mean difference for the
-  rest.
+  rest. A test without a p-value (too few runs on a side) gets q NaN and doesn't fail.
 
 `compare_folders` pairs the CSVs of two output folders by legacy filename and runs these tests per cell.
 `run_shared_start` runs legacy and anb from one identical t = 0 state, to rule out the initial conditions.
@@ -107,9 +108,14 @@ def compare_responses(a: np.ndarray, b: np.ndarray, rng: np.random.Generator,
 
 def welch(a: np.ndarray, b: np.ndarray) -> dict:
     """mean(b) − mean(a) with its SE, a 95 % Welch CI, the gap in SEs, the standardised mean difference and the
-    Welch p-value. NaNs are dropped."""
+    Welch p-value. NaNs are dropped. With fewer than two values on a side the SE, CI and p are NaN."""
     a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
     a, b = a[~np.isnan(a)], b[~np.isnan(b)]
+    if min(len(a), len(b)) < 2:
+        nan = float("nan")
+        return {"mean_legacy": a.mean() if len(a) else nan, "mean_anb": b.mean() if len(b) else nan,
+                "diff": b.mean() - a.mean() if len(a) and len(b) else nan, "se": nan, "ci_low": nan,
+                "ci_high": nan, "gap_se": nan, "smd": nan, "p": nan}
     diff = b.mean() - a.mean()
     var_a, var_b = a.var(ddof=1) / len(a), b.var(ddof=1) / len(b)
     se = np.sqrt(var_a + var_b)
@@ -129,11 +135,14 @@ def welch(a: np.ndarray, b: np.ndarray) -> dict:
 
 
 def compare_values(a: np.ndarray, b: np.ndarray) -> dict:
-    """`welch` plus a two-sample KS on run-level values (its p-value replaces the Welch one). NaNs are dropped."""
+    """`welch` plus a two-sample KS on run-level values (its p-value replaces the Welch one). NaNs are dropped;
+    a side with fewer than two values left gives KS and p NaN, as in `welch`."""
     a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
     out = welch(a, b)
     a, b = a[~np.isnan(a)], b[~np.isnan(b)]
-    if np.ptp(np.concatenate([a, b])) == 0:
+    if min(len(a), len(b)) < 2:
+        out["ks"], out["p"] = float("nan"), float("nan")
+    elif np.ptp(np.concatenate([a, b])) == 0:
         out["ks"], out["p"] = 0.0, 1.0  # both constant and equal (e.g. edge metrics of a static BN)
     else:
         result = stats.ks_2samp(a, b)
@@ -142,9 +151,17 @@ def compare_values(a: np.ndarray, b: np.ndarray) -> dict:
 
 
 def correct(table: pd.DataFrame) -> pd.DataFrame:
-    """Add Benjamini–Hochberg `q` and `fail` (q < `ALPHA`) over all rows of one test family."""
+    """Add Benjamini–Hochberg `q` and `fail` (q < `ALPHA`) over the rows of one test family with a p-value.
+
+    A row whose p is NaN (too few runs to test) gets q NaN and doesn't fail; it doesn't count towards the
+    correction of the others either (a NaN passed to `multipletests` would make every q NaN).
+    """
     out = table.copy()
-    out["q"] = multipletests(out.p, method="fdr_bh")[1] if len(out) else []
+    out["q"] = np.nan
+    if len(out):
+        tested = out.p.notna().to_numpy()
+        if tested.any():
+            out.loc[tested, "q"] = multipletests(out.p[tested], method="fdr_bh")[1]
     out["fail"] = out.q < ALPHA
     return out
 
@@ -166,14 +183,18 @@ def response_table(legacy: pd.DataFrame, new: pd.DataFrame, rng: np.random.Gener
     return correct(pd.DataFrame(rows))
 
 
+LEAN_QUANTITIES = {"share positive": "lean", "x_focal@before": "x_focal@before"}  # quantity → summary column
+
+
 def lean_table(legacy: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
-    """One row per cell: Welch on the run-level share positive before pressure, the gap in SEs and the SMD."""
+    """Two rows per cell, one per `LEAN_QUANTITIES` (the run-level share positive before pressure and the run mean
+    of `x_focal` before pressure): Welch, the gap in SEs and the SMD."""
     rows = []
     for (config, pressure), old in legacy.groupby(["config", "pressure"], sort=False):
         cell = new[(new.config == config) & (new.pressure == pressure)]
-        w = welch(old.lean, cell.lean)
-        rows.append({"config": config, "pressure": pressure, "lean_legacy": w.pop("mean_legacy"),
-                     "lean_anb": w.pop("mean_anb"), **w})
+        for quantity, column in LEAN_QUANTITIES.items():
+            rows.append({"config": config, "pressure": pressure, "quantity": quantity,
+                         **welch(old[column], cell[column])})
     return correct(pd.DataFrame(rows))
 
 
@@ -203,8 +224,31 @@ PAPER_CONFIGS = {
     "adaptive-static": (0.2, 1.0, 0.0, True),
     "adaptive": (0.2, 1.0, 0.0, False),
 }
+PAPER_FIXED = dict(link_prob=0.1, beta=3.0, rho=1 / 3, lam=0.0)  # the paper's other parameters
 _BASELINE = dict(link_prob=0.1, init_w=0.2, beta=3.0, rho=0.33, eps=1.0, mu=0.0, fixedBNat100=False, lam=0.0,
                  n_events=1)  # the adaptive paper config; a filename holds rho to two decimals
+
+
+def paper_cell(config: str, **changes) -> dict:
+    """The cell of a `PAPER_CONFIGS` config (as `anb_agent`, `cell_testbed` and `run_shared_start` take it), with
+    `changes` applied."""
+    init_w, eps, mu, fixed = PAPER_CONFIGS[config]
+    return {**PAPER_FIXED, "init_w": init_w, "eps": eps, "mu": mu, "fixedBNat100": fixed, **changes}
+
+
+def anb_agent(cell: dict, **changes) -> ANBAgent:
+    """The anb agent of a cell. `fixedBNat100` becomes `learning_until = 101`; `changes` override agent arguments
+    (e.g. `learning_until=102` for the ablation)."""
+    kwargs = dict(beta=cell["beta"], eps=cell["eps"], mu=cell["mu"], lam=cell.get("lam", 0.0), init_w=cell["init_w"],
+                  learning_until=101 if cell["fixedBNat100"] else None)
+    return ANBAgent(**(kwargs | changes))
+
+
+def cell_testbed(cell: dict, pressure: float, n_agents: int = 100, **agent_changes) -> Testbed:
+    """The anb counterpart of a legacy ensemble cell: an Erdős–Rényi `Testbed` with the paper's single event."""
+    spec = ModelSpec(anb_agent(cell, **agent_changes), ErdosRenyiNetwork, {"link_prob": cell["link_prob"]},
+                     n_agents, cell["rho"])
+    return Testbed(spec, TestbedConfig(PressureSchedule.single_event(pressure)))
 
 
 SUMMARY_CELL_COLUMNS = ("config", "pressure", "mu", "seed")  # what a summary row carries from its file name
@@ -241,10 +285,12 @@ def cell_label(cell: dict) -> str:
 
 @dataclass
 class Pairing:
-    """File stems (no `.csv`) found in both folders, and in one only."""
+    """File stems (no `.csv`) found in both folders, and in one only. `unparsed` are in both but aren't legacy
+    ensemble file names (e.g. a run saved with `legacy_names=False`), so they have no cell and aren't compared."""
     matched: list[str]
     only_old: list[str]
     only_new: list[str]
+    unparsed: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -265,6 +311,14 @@ def _stems(folder: Path) -> set[str]:
     return {path.stem for path in Path(folder).glob("sim_*.csv")}
 
 
+def _parses(stem: str) -> bool:
+    return _FILENAME.fullmatch(stem) is not None
+
+
+def _cell_name(stem: str) -> str:
+    return re.sub(r"_seed\d+", "", stem)
+
+
 def _summarise_file(path: Path) -> dict:
     return summarise_run(pd.read_csv(path))
 
@@ -280,12 +334,20 @@ def _cell_key(folder: Path, stems: list[str]) -> str:
 
 
 def _summaries(folder: Path, stems: list[str], cache_dir: Path | None = None, n_jobs: int = -1) -> pd.DataFrame:
-    """One summary row per run. With `cache_dir`, each cell's rows are stored under (folder, cell) and reused
-    while the cell's files are unchanged; the other cells' CSVs are read in parallel."""
+    """One summary row per run of `stems` (legacy ensemble names, sorted). With `cache_dir`, the rows of every run
+    of a cell in `folder` are stored under (folder, cell) and reused while those files are unchanged, so comparing
+    the folder with partners of different seed coverage shares one cache file. The other cells' CSVs are read
+    in parallel."""
     folder = Path(folder)
     cells: dict[str, list[str]] = {}
     for stem in stems:
-        cells.setdefault(re.sub(r"_seed\d+", "", stem), []).append(stem)
+        cells.setdefault(_cell_name(stem), []).append(stem)
+    wanted = {name: {parse_filename(stem)[1] for stem in members} for name, members in cells.items()}
+    if cache_dir is not None:
+        for stem in sorted(_stems(folder) - set(stems)):
+            if _parses(stem) and _cell_name(stem) in cells:
+                cells[_cell_name(stem)].append(stem)
+        cells = {name: sorted(members) for name, members in cells.items()}
     frames, todo = {}, {}
     for cell_name, members in cells.items():
         entry = None
@@ -314,23 +376,27 @@ def _summaries(folder: Path, stems: list[str], cache_dir: Path | None = None, n_
             partial = entry[0].with_suffix(".tmp")
             pd.to_pickle({"key": entry[1], "rows": frames[name]}, partial)
             partial.replace(entry[0])  # atomic, so an interrupted run never leaves a truncated cache file
-    return pd.concat([frames[name] for name in cells], ignore_index=True)
+    return pd.concat([frames[name][frames[name].seed.isin(wanted[name])] for name in cells], ignore_index=True)
 
 
 def compare_folders(old: str | Path, new: str | Path, permutation_seed: int = 0,
                     n_permutations: int = N_PERMUTATIONS, cache_dir: str | Path | None = None,
                     n_jobs: int = -1) -> Comparison:
-    """Compare two ensemble output folders. Files are paired by name; those in one folder only are reported.
+    """Compare two ensemble output folders. Files are paired by name; those in one folder only, and paired ones
+    that aren't legacy ensemble names, are reported in `pairing` and not compared.
 
-    Four tables, one row per cell (metrics: per cell × window × metric), each corrected with Benjamini–Hochberg
-    within itself and ranked by effect size, with `q` alongside: pooled responses and conditional responses
-    (Cramér's V), lean and metrics (|SMD|). `top_differences` merges them. Run summaries are read with `n_jobs` workers; with `cache_dir` they
-    are cached per (folder, cell) and rebuilt for any cell whose files changed. Writes nothing else.
+    Four tables, each corrected with Benjamini–Hochberg within itself and ranked by effect size, with `q`
+    alongside: pooled responses and conditional responses (one row per cell, Cramér's V), lean (per cell ×
+    quantity) and metrics (per cell × window × metric), both by |SMD|. `top_differences` merges them. Run
+    summaries are read with `n_jobs` workers; with `cache_dir` they are cached per (folder, cell) and rebuilt for
+    any cell whose files changed. Writes nothing but that cache.
     """
     in_old, in_new = _stems(old), _stems(new)
-    pairing = Pairing(sorted(in_old & in_new), sorted(in_old - in_new), sorted(in_new - in_old))
+    both = in_old & in_new
+    unparsed = sorted(stem for stem in both if not _parses(stem))
+    pairing = Pairing(sorted(both - set(unparsed)), sorted(in_old - in_new), sorted(in_new - in_old), unparsed)
     if not pairing.matched:
-        raise ValueError(f"no CSV files with the same name in {old} and {new}")
+        raise ValueError(f"no CSV files with the same legacy name in {old} and {new}")
     legacy = _summaries(Path(old), pairing.matched, cache_dir, n_jobs)
     anb = _summaries(Path(new), pairing.matched, cache_dir, n_jobs)
     rng = np.random.default_rng(permutation_seed)
@@ -414,7 +480,7 @@ def _top_differences(pooled, conditional, lean, metrics) -> pd.DataFrame:
     parts = []
     for family, table in (("pooled responses", pooled), ("conditional responses", conditional)):
         parts.append(table.assign(family=family, detail="", effect=table.cramers_v))
-    parts.append(lean.assign(family="lean", detail="share positive", effect=lean.smd.abs()))
+    parts.append(lean.assign(family="lean", detail=lean.quantity, effect=lean.smd.abs()))
     parts.append(metrics.assign(family="metrics", detail=metrics.metric + "@" + metrics.window,
                                 effect=metrics.smd.abs()))
     columns = ["family", "config", "pressure", "detail", "effect", "q", "fail"]
@@ -463,16 +529,9 @@ def adjacency_from_nb_list(nb_list: list[np.ndarray]) -> np.ndarray:
     return adjacency
 
 
-def _anb_agent(cell: dict) -> ANBAgent:
-    """The anb agent of a cell. `fixedBNat100` becomes `learning_until = 101`."""
-    return ANBAgent(beta=cell["beta"], eps=cell["eps"], mu=cell["mu"], lam=cell.get("lam", 0.0),
-                    init_w=cell["init_w"], learning_until=101 if cell["fixedBNat100"] else None)
-
-
 def build_shared_start(cell: dict, start_seed: int, n_agents: int = 100) -> tuple[AgentState, np.ndarray]:
     """The t = 0 state of `start_seed` for `cell`: `(AgentState, 0/1 adjacency)`, drawn the way anb draws its own."""
-    spec = ModelSpec(_anb_agent(cell), ErdosRenyiNetwork, {"link_prob": cell["link_prob"]}, n_agents, cell["rho"])
-    model = spec.build(np.random.default_rng(start_seed))
+    model = cell_testbed(cell, 0.0, n_agents).spec.build(np.random.default_rng(start_seed))
     return model.state, model.network.adjacency
 
 
@@ -484,10 +543,11 @@ class SharedStartSpec(ModelSpec):
     adjacency: np.ndarray | None = None
 
     def build(self, rng: np.random.Generator) -> ANBModel:
+        self.agent.param_arrays(self.n_agents)  # raises on per-agent parameters of the wrong length
         state = AgentState(self.state.beliefs.copy(), self.state.edge_weights.copy(),
                            self.state.delta_memory.copy(), self.state.focal.copy())
         network = self.network_cls(self.adjacency.copy(), **self.network_kwargs)
-        return ANBModel(self.agent, network, state, self.rho)
+        return self.checked_model(state, network)
 
 
 def _legacy_replica(load_legacy, cell, pressure, seed, state, adjacency, steps, schedule) -> pd.DataFrame:
@@ -528,17 +588,18 @@ def _oracle_loader():
     return load_legacy
 
 
-def _shared_start_replica(implementation, load_legacy, cell, pressure, replica, state, adjacency, steps, schedule):
+def _shared_start_replica(implementation, load_legacy, cell, pressure, replica, seed, state, adjacency, steps,
+                          schedule):
     steps = set(steps)
     if implementation == "legacy":
         load_legacy = load_legacy or _oracle_loader()
-        frame = _legacy_replica(load_legacy, cell, pressure, replica, state, adjacency, sorted(steps), schedule)
+        frame = _legacy_replica(load_legacy, cell, pressure, seed, state, adjacency, sorted(steps), schedule)
     else:
-        spec = SharedStartSpec(_anb_agent(cell), ErdosRenyiNetwork, {"link_prob": cell["link_prob"]},
+        spec = SharedStartSpec(anb_agent(cell), ErdosRenyiNetwork, {"link_prob": cell["link_prob"]},
                                state.n_agents, cell["rho"], state, adjacency)
         end = max(steps)
         config = TestbedConfig(schedule, window_len=1, recovery=max(0, end - schedule.events[-1][1]), detail=True)
-        frame = Testbed(spec, config).run(replica).frame
+        frame = Testbed(spec, config).run(seed).frame
     return _long_format(frame, implementation, replica, steps)
 
 
@@ -548,7 +609,8 @@ def run_shared_start(cell: dict, pressure: float, start_seed: int = 0, k: int = 
 
     `cell` holds `link_prob`, `init_w`, `beta`, `rho`, `eps`, `mu`, `fixedBNat100` (and optionally `lam`), as
     `parse_filename` returns them. The state (beliefs, edge weights, adjacency, belief-change memory) is drawn once
-    from `start_seed`. Replica `r` of each implementation then runs with seed `r`: legacy on a fresh `load_legacy`
+    from `start_seed`. Replica `r` of each implementation then runs with seed `start_seed + 1 + r`, so no anb
+    replica reuses the stream that drew the start: legacy on a fresh `load_legacy`
     copy (the oracle's loader, `legacy_oracle.load_legacy` from the repo's `tests/` by default, so legacy is only
     ever reached through it), anb through `Testbed`. The two RNG streams differ by design, so replicas agree in
     distribution only.
@@ -563,7 +625,8 @@ def run_shared_start(cell: dict, pressure: float, start_seed: int = 0, k: int = 
     schedule = schedule or PressureSchedule.single_event(pressure)
     steps = [0, *range(window[0], window[1] + 1)]
     state, adjacency = build_shared_start(cell, start_seed)
-    jobs = [(implementation, load_legacy, cell, pressure, replica, state, adjacency, steps, schedule)
+    jobs = [(implementation, load_legacy, cell, pressure, replica, start_seed + 1 + replica, state, adjacency, steps,
+             schedule)
             for implementation in ("legacy", "anb") for replica in range(k)]
     runs = Parallel(n_jobs=n_jobs)(delayed(_shared_start_replica)(*job) for job in jobs)
     return pd.concat(runs, ignore_index=True)

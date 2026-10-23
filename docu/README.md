@@ -17,7 +17,7 @@ Code documentation for the ANB model and its analysis pipeline. The theory and r
 | [adr-002-testbed-architecture.md](adr-002-testbed-architecture.md) | Design decision: refactor into an `anb/` package with Agent/Network ABCs, an injectable model and a testbed |
 | [class-design.md](class-design.md) | Mermaid class diagrams of the `anb/` package (one namespace per module), responsibilities of each class, and the resolution of ADR-002's open points |
 | [spec-anb-package.md](spec-anb-package.md) | The buildable spec the `anb/` package was implemented from: user stories, module decisions, test seams |
-| [validation.md](validation.md) | Statistical validation of `anb` against `ANBmodel.py`, the benchmark, and the deliberate differences awaiting supervisor sign-off |
+| [validation.md](validation.md) | Statistical validation of `anb` against `ANBmodel.py`, comparing two output folders (`compare_old_new.py`: tables, ablations, reruns, shared starts), the benchmark, and the deliberate differences awaiting supervisor sign-off |
 
 ## The model in one paragraph
 

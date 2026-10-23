@@ -157,6 +157,20 @@ path. The
 testbed notebook adds an `ensemble i/n` line per (setting, pressure), timestamps every line and also writes the
 log to `sweep.log` next to the CSVs.
 
+## Comparing two sweeps
+
+`compare_old_new.py` (repo root, a `# %%` script) compares two ensemble folders, by default the legacy sweep in
+`simOut_old_model` with the `anb` sweep in `simOut_new_model`. Both need the same file names, so run the same
+`param_combis × pressures × seeds` on both sides. It writes its tables, plots and `summary.md` to the git-ignored
+`compare_out/` and caches run summaries in `compare_out/cache/` (rebuilt automatically when a folder's files
+change). Its optional ablation and rerun cells write their own `simOut_*` folders. How to configure it and read
+its output is in [validation.md](validation.md#comparing-two-output-folders).
+
+The statistical validation (`pytest -m slow -s tests/test_statistical_validation.py`) no longer caches inside
+`simOut_old_model`. Its report, tables and run cache are in the git-ignored `validation_out/` (cache:
+`validation_out/runs/`), so `simOut_old_model` holds only sweep CSVs. Delete a leftover
+`simOut_old_model/validation/` from before the move.
+
 ## Rough cost
 
 One ensemble simulation (N=100, M=10, T=200) is quick. Metrics are only computed at 34 tracked

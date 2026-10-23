@@ -80,6 +80,23 @@ def test_correction_flags_only_the_real_deviation_among_many_nulls():
     assert failed[:-1].sum() <= 2
 
 
+def test_an_untestable_row_leaves_the_correction_of_the_others_intact():
+    """A side with one run has no SE, so no p; it must not turn every q of the family into NaN."""
+    rng = np.random.default_rng(6)
+    rows = [compare_values(rng.normal(0, 1, 100), rng.normal(3, 1, 100)), compare_values([0.1], [0.2, 0.3])]
+
+    table = correct(pd.DataFrame(rows))
+
+    assert np.isnan(table.p[1]) and np.isnan(table.q[1]) and not table.fail[1]
+    assert table.fail[0] and table.q[0] == pytest.approx(table.p[0])
+
+
+def test_a_metric_nan_in_every_run_gives_nan_instead_of_an_error():
+    result = compare_values(np.full(10, np.nan), np.full(10, np.nan))
+
+    assert all(np.isnan(result[k]) for k in ("p", "ks", "diff", "smd"))
+
+
 def test_summarise_run_counts_responses_and_unlabelled_agents():
     """Three agents on the 95.5 row: compliant, resistant, and one with no label (dummies stored as objects)."""
     dummies = {name: [False, False, False] for name in RESPONSES[:-1]}

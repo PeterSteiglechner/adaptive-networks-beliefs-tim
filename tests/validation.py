@@ -6,11 +6,16 @@ of comparison is the run, not the agent, because agents in one run share a netwo
 
 - Responses, per cell: χ² statistic on the pooled 2 × K table (6 responses plus `unlabelled`). Its p-value
   comes from permuting the implementation labels of whole runs, so within-run correlation can't inflate it.
+  The same test on the agents negative before pressure gives the conditional table.
+- Lean, per cell: Welch on the run-level share positive before pressure and on the run mean of `x_focal` before
+  pressure (a run's lean is almost one coin flip).
 - Metrics, per cell × window × metric: two-sample KS test on the run means, plus the difference of means with
   a 95 % Welch CI for reading the size of any deviation.
-- Failures: Benjamini–Hochberg q < `ALPHA`, within each family (responses, metrics).
+- Failures: Benjamini–Hochberg q < `ALPHA`, within each family (pooled, conditional, lean, metrics).
 
-Run summaries are cached per (implementation, cell) under `cache_dir`, so a rerun only adds missing cells.
+The paper configs, the anb testbed of a cell, run summaries, tests and tables all come from `anb.comparison`, as
+in the folder comparison, so the two can't disagree on method. Run summaries are cached per (implementation, cell) under `cache_dir`, so a rerun only adds
+missing cells. The default output folder `validation_out/` is separate from the sweep CSVs in `simOut_*`.
 """
 
 from pathlib import Path
@@ -19,37 +24,28 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 
-from anb.agents import ANBAgent
-from anb.comparison import ALPHA, metric_table, response_table, summarise_run
-from anb.model import ModelSpec
-from anb.networks import ErdosRenyiNetwork
-from anb.testbed import PressureSchedule, Testbed, TestbedConfig
+from anb.comparison import (ALPHA, NEGATIVE_RESPONSES, PAPER_CONFIGS, RESPONSES, cell_testbed, compare_values,
+                            lean_table, metric_table, paper_cell, response_table, summarise_run)
+from anb.testbed import Testbed
 from legacy_oracle import load_legacy
 
-CONFIGS = {  # the paper's BN configurations: init_w, eps, mu, fixedBNat100 (legacy `__main__`)
-    "static0.2": (0.2, 0.0, 0.0, False),
-    "static0.8": (0.8, 0.0, 0.0, False),
-    "adaptive-static": (0.2, 1.0, 0.0, True),
-    "adaptive": (0.2, 1.0, 0.0, False),
-}
+CONFIGS = PAPER_CONFIGS
 PRESSURES = (0, 1, 2, 4, 8, 16)
-FIXED = dict(link_prob=0.1, beta=3.0, rho=1 / 3)
+OUT_DIR = Path(__file__).resolve().parent.parent / "validation_out"
+LEGACY_PARAMS = ("link_prob", "init_w", "beta", "rho", "eps", "mu", "fixedBNat100")  # what legacy's `params` holds
 
 
 # Running and summarising
 
 
 def legacy_run_params(config: str, pressure: float, seed: int) -> dict:
-    init_w, eps, mu, fixed = CONFIGS[config]
-    return dict(FIXED, init_w=init_w, eps=eps, mu=mu, fixedBNat100=fixed, ext_strength=pressure, seed=seed)
+    cell = paper_cell(config)
+    return {**{k: cell[k] for k in LEGACY_PARAMS}, "ext_strength": pressure, "seed": seed}
 
 
-def anb_testbed(config: str, pressure: float) -> Testbed:
+def anb_testbed(config: str, pressure: float, **agent_changes) -> Testbed:
     """The new-package counterpart of a legacy cell. `fixedBNat100` becomes `learning_until = 101`."""
-    init_w, eps, mu, fixed = CONFIGS[config]
-    agent = ANBAgent(beta=FIXED["beta"], eps=eps, mu=mu, init_w=init_w, learning_until=101 if fixed else None)
-    spec = ModelSpec(agent, ErdosRenyiNetwork, {"link_prob": FIXED["link_prob"]}, n_agents=100, rho=FIXED["rho"])
-    return Testbed(spec, TestbedConfig(PressureSchedule.single_event(pressure)))
+    return cell_testbed(paper_cell(config), pressure, **agent_changes)
 
 
 def run_legacy(config: str, pressure: float, seed: int) -> dict:
@@ -73,7 +69,7 @@ def collect(impl: str, seeds, cache_dir: Path, n_jobs: int = -1) -> pd.DataFrame
         for pressure in PRESSURES:
             path = cache_dir / f"{impl}_{config}_s{pressure}.csv"
             cached = pd.read_csv(path) if path.exists() else None
-            if cached is not None and cached.seed.tolist() == seeds:
+            if cached is not None and cached.seed.tolist() == seeds and "lean" in cached:
                 cells[config, pressure] = cached
             else:
                 missing.append((config, pressure))
@@ -94,40 +90,64 @@ def collect(impl: str, seeds, cache_dir: Path, n_jobs: int = -1) -> pd.DataFrame
 # Report
 
 
-def validate(seeds=range(100), out_dir=Path("simOut_old_model/validation"), n_jobs: int = -1, seed: int = 0):
-    """Run (or load) both implementations, compare them, and write `responses.csv`, `metrics.csv` and
-    `report.md` into `out_dir`. Returns `(responses, metrics)` tables with `q` and `fail` columns."""
+def validate(seeds=range(100), out_dir=OUT_DIR, n_jobs: int = -1, seed: int = 0) -> dict[str, pd.DataFrame]:
+    """Run (or load) both implementations, compare them, and write `pooled_responses.csv`,
+    `conditional_responses.csv`, `lean.csv`, `metrics.csv` and `report.md` into `out_dir`.
+    Returns the four tables (with `q` and `fail` columns) by name."""
     out_dir = Path(out_dir)
     legacy = collect("legacy", seeds, out_dir / "runs", n_jobs)
     new = collect("anb", seeds, out_dir / "runs", n_jobs)
-    responses = response_table(legacy, new, np.random.default_rng(seed))
-    metrics = metric_table(legacy, new)
-    responses.to_csv(out_dir / "responses.csv", index=False)
-    metrics.to_csv(out_dir / "metrics.csv", index=False)
-    (out_dir / "report.md").write_text(report(responses, metrics, len(list(seeds))))
-    return responses, metrics
+    rng = np.random.default_rng(seed)
+    tables = {
+        "pooled_responses": response_table(legacy, new, rng),
+        "conditional_responses": response_table(legacy, new, rng, categories=NEGATIVE_RESPONSES),
+        "lean": lean_table(legacy, new),
+        "metrics": metric_table(legacy, new),
+    }
+    for name, table in tables.items():
+        table.to_csv(out_dir / f"{name}.csv", index=False)
+    (out_dir / "report.md").write_text(report(tables, len(list(seeds))))
+    return tables
 
 
-def report(responses: pd.DataFrame, metrics: pd.DataFrame, n_seeds: int) -> str:
+def _response_section(title: str, table: pd.DataFrame, categories: tuple[str, ...]) -> list[str]:
+    lines = [f"## {title} (share of agents, legacy → anb)", "",
+             "| config | s | " + " | ".join(categories) + " | p | q |",
+             "|---|---|" + "---|" * (len(categories) + 2)]
+    for _, r in table.iterrows():
+        shares = " | ".join(f"{r[f'{n}_legacy']:.3f} → {r[f'{n}_anb']:.3f}" for n in categories)
+        lines.append(f"| {r.config} | {r.pressure} | {shares} | {r.p:.3g} | {r.q:.3g} |")
+    return lines + [""]
+
+
+def report(tables: dict[str, pd.DataFrame], n_seeds: int) -> str:
+    pooled, conditional = tables["pooled_responses"], tables["conditional_responses"]
+    lean, metrics = tables["lean"], tables["metrics"]
     lines = [
         "# Statistical validation: `anb` vs legacy `ANBmodel.py`",
         "",
         f"{len(CONFIGS)} configurations × {len(PRESSURES)} pressures, {n_seeds} seeds per cell and implementation.",
         f"Failures: Benjamini–Hochberg q < {ALPHA} within each family.",
         "",
-        f"- Response frequencies (χ², run-level permutation): {int(responses.fail.sum())} of {len(responses)} "
-        f"cells fail; smallest p = {responses.p.min():.3g}",
+        f"- Response frequencies (χ², run-level permutation): {int(pooled.fail.sum())} of {len(pooled)} "
+        f"cells fail; smallest p = {pooled.p.min():.3g}",
+        f"- Response frequencies of agents negative before pressure: {int(conditional.fail.sum())} of "
+        f"{len(conditional)} cells fail; smallest p = {conditional.p.min():.3g}",
+        f"- Lean (share positive and `x_focal` before pressure, Welch on runs): {int(lean.fail.sum())} of "
+        f"{len(lean)} tests fail; smallest p = {lean.p.min():.3g}",
         f"- Metric distributions (KS on run means): {int(metrics.fail.sum())} of {len(metrics)} tests fail; "
         f"smallest p = {metrics.p.min():.3g}",
         "",
-        "## Response frequencies (share of agents, legacy → anb)",
-        "",
-        "| config | s | " + " | ".join(RESPONSES) + " | p | q |",
-        "|---|---|" + "---|" * (len(RESPONSES) + 2),
     ]
-    for _, r in responses.iterrows():
-        shares = " | ".join(f"{r[f'{n}_legacy']:.3f} → {r[f'{n}_anb']:.3f}" for n in RESPONSES)
-        lines.append(f"| {r.config} | {r.pressure} | {shares} | {r.p:.3g} | {r.q:.3g} |")
+    lines += _response_section("Response frequencies", pooled, RESPONSES)
+    lines += _response_section("Response frequencies of agents negative before pressure", conditional,
+                               NEGATIVE_RESPONSES)
+    lines += ["## Lean: share positive and `x_focal` before pressure (legacy → anb)", "",
+              "| config | s | quantity | legacy → anb | diff [95 % CI] | gap (SE) | SMD | p | q |",
+              "|---|---|---|---|---|---|---|---|---|"]
+    for _, r in lean.iterrows():
+        lines.append(f"| {r.config} | {r.pressure} | {r.quantity} | {r.mean_legacy:.3f} → {r.mean_anb:.3f} | {r['diff']:.3g} "
+                     f"[{r.ci_low:.3g}, {r.ci_high:.3g}] | {r.gap_se:.2f} | {r.smd:.2f} | {r.p:.3g} | {r.q:.3g} |")
     lines += ["", "## Metric failures", ""]
     failed = metrics[metrics.fail]
     if failed.empty:
@@ -150,15 +170,14 @@ def report(responses: pd.DataFrame, metrics: pd.DataFrame, n_seeds: int) -> str:
 # Follow-ups to patterns in the report (docu/validation.md, "Patterns looked at")
 
 
-def gate_check(pressure: float, learning_until: int, cache_dir=Path("simOut_old_model/validation/runs"), seeds=range(100),
+def gate_check(pressure: float, learning_until: int, cache_dir=OUT_DIR / "runs", seeds=range(100),
                n_jobs: int = -1) -> dict:
     """`bc_foc` (during window) of adaptive→static: cached legacy runs versus `anb` with `learning_until`.
 
     101 is the package's gate (static from the first pressure step), 102 is legacy's effective one (t > 101).
     """
     def run(seed):
-        testbed = anb_testbed("adaptive-static", pressure)
-        testbed.spec.agent.learning_until = learning_until
+        testbed = anb_testbed("adaptive-static", pressure, learning_until=learning_until)
         return summarise_run(testbed.run(seed).frame)["bc_foc@during"]
 
     legacy = pd.read_csv(Path(cache_dir) / f"legacy_adaptive-static_s{pressure}.csv")
@@ -170,5 +189,5 @@ def gate_check(pressure: float, learning_until: int, cache_dir=Path("simOut_old_
 def positive_share(impl: str, config: str, seeds=range(1000), n_jobs: int = -1) -> tuple[float, float]:
     """Mean and standard error over runs of the share of agents whose focal belief is ≥ 0 before the pressure."""
     rows = Parallel(n_jobs=n_jobs)(delayed(RUNNERS[impl])(config, 0, seed) for seed in seeds)
-    shares = np.array([(r["persistPos"] + r["nonpersistPos"]) / 100 for r in rows])
+    shares = np.array([r["lean"] for r in rows])
     return float(shares.mean()), float(shares.std(ddof=1) / np.sqrt(len(shares)))
