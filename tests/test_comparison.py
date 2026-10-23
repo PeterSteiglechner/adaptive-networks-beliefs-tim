@@ -1,10 +1,10 @@
-"""The statistics of the on-demand validation (`validation.py`): calibrated under the null, sensitive to shifts."""
+"""The statistics of the on-demand validation (`anb.comparison`): calibrated under the null, sensitive to shifts."""
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from validation import RESPONSES, compare_responses, compare_values, correct, summarise_run
+from anb.comparison import RESPONSES, compare_responses, compare_values, correct, summarise_run
 
 K = len(RESPONSES)
 
