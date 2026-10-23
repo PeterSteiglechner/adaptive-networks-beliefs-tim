@@ -11,9 +11,9 @@ It reports the first step at which each quantity diverges significantly. The rep
 
 **Blocked by:** #09, #05
 
-**Status:** open
+**Status:** done
 
-- [ ] Given trajectories, the comparison returns per-step differences with CIs, q-values, and a first-divergent-step per quantity
-- [ ] On synthetic trajectories with a divergence injected from a known step, that step is reported
-- [ ] With the toggle on, the report script writes the divergence table and plots
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] Given trajectories, the comparison returns per-step differences with CIs, q-values, and a first-divergent-step per quantity
+- [x] On synthetic trajectories with a divergence injected from a known step, that step is reported
+- [x] With the toggle on, the report script writes the divergence table and plots
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
