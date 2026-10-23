@@ -15,6 +15,7 @@ influence each other.
   rest.
 
 `compare_folders` pairs the CSVs of two output folders by legacy filename and runs these tests per cell.
+`run_shared_start` runs legacy and anb from one identical t = 0 state, to rule out the initial conditions.
 
 Plain Python, no Numba.
 """
@@ -32,8 +33,12 @@ from joblib import Parallel, delayed
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 
+from anb.agents import ANBAgent, AgentState
 from anb.io import legacy_filename
 from anb.metrics import RESPONSE_COLUMNS
+from anb.model import ANBModel, ModelSpec
+from anb.networks import ErdosRenyiNetwork
+from anb.testbed import PressureSchedule, Testbed, TestbedConfig
 
 ALPHA = 0.05
 N_PERMUTATIONS = 10_000
@@ -414,3 +419,140 @@ def _top_differences(pooled, conditional, lean, metrics) -> pd.DataFrame:
     columns = ["family", "config", "pressure", "detail", "effect", "q", "fail"]
     top = pd.concat([part[columns] for part in parts], ignore_index=True)
     return top.iloc[(-top.effect).argsort(kind="stable")].reset_index(drop=True)
+
+
+# Shared start: legacy and anb from one identical t = 0 state
+
+def state_from_legacy_rows(legacy, agents: np.ndarray) -> AgentState:
+    """Legacy's `(N, columns)` agent array → `AgentState` (copies). Edge weights become the symmetric `(N, M, M)`."""
+    n, m = len(agents), legacy.M
+    edges = np.zeros((n, m, m))
+    rows, cols = legacy.edge_arr.T
+    edges[:, rows, cols] = agents[:, legacy.edgeids]
+    edges[:, cols, rows] = agents[:, legacy.edgeids]
+    return AgentState(
+        beliefs=agents[:, legacy.beliefids].copy(),
+        edge_weights=edges,
+        delta_memory=agents[:, list(legacy.delbeliefids)].reshape(n, legacy.tau, m).copy(),
+        focal=np.full(n, legacy.focal, dtype=np.int64),
+    )
+
+
+def legacy_rows_from_state(legacy, state: AgentState) -> np.ndarray:
+    """`AgentState` → legacy's agent array at t = 0, as `initialise_agents` lays it out (metric columns NaN)."""
+    n = state.n_agents
+    agents = np.full((n, max(legacy.delbeliefids) + 1), np.nan)
+    agents[:, 0], agents[:, 1] = 0, np.arange(n)
+    agents[:, legacy.beliefids] = state.beliefs
+    agents[:, legacy.edgeids] = state.edge_vector()
+    agents[:, list(legacy.delbeliefids)] = state.delta_memory.reshape(n, -1)
+    return agents
+
+
+def nb_list_from_adjacency(adjacency: np.ndarray) -> list[np.ndarray]:
+    """Legacy's neighbour lists (sorted index arrays) of a 0/1 adjacency matrix."""
+    return [np.flatnonzero(row) for row in adjacency]
+
+
+def adjacency_from_nb_list(nb_list: list[np.ndarray]) -> np.ndarray:
+    """The 0/1 adjacency matrix of legacy's neighbour lists."""
+    adjacency = np.zeros((len(nb_list), len(nb_list)))
+    for i, nbs in enumerate(nb_list):
+        adjacency[i, nbs] = 1.0
+    return adjacency
+
+
+def _anb_agent(cell: dict) -> ANBAgent:
+    """The anb agent of a cell. `fixedBNat100` becomes `learning_until = 101`."""
+    return ANBAgent(beta=cell["beta"], eps=cell["eps"], mu=cell["mu"], lam=cell.get("lam", 0.0),
+                    init_w=cell["init_w"], learning_until=101 if cell["fixedBNat100"] else None)
+
+
+def build_shared_start(cell: dict, start_seed: int, n_agents: int = 100) -> tuple[AgentState, np.ndarray]:
+    """The t = 0 state of `start_seed` for `cell`: `(AgentState, 0/1 adjacency)`, drawn the way anb draws its own."""
+    spec = ModelSpec(_anb_agent(cell), ErdosRenyiNetwork, {"link_prob": cell["link_prob"]}, n_agents, cell["rho"])
+    model = spec.build(np.random.default_rng(start_seed))
+    return model.state, model.network.adjacency
+
+
+@dataclass
+class SharedStartSpec(ModelSpec):
+    """A `ModelSpec` whose `build` returns copies of one given state and network, so every replica starts alike."""
+
+    state: AgentState | None = None
+    adjacency: np.ndarray | None = None
+
+    def build(self, rng: np.random.Generator) -> ANBModel:
+        state = AgentState(self.state.beliefs.copy(), self.state.edge_weights.copy(),
+                           self.state.delta_memory.copy(), self.state.focal.copy())
+        network = self.network_cls(self.adjacency.copy(), **self.network_kwargs)
+        return ANBModel(self.agent, network, state, self.rho)
+
+
+def _legacy_replica(load_legacy, cell, pressure, seed, state, adjacency, steps, schedule) -> pd.DataFrame:
+    """One legacy run on a fresh module copy whose initialisers return the shared state.
+
+    The copy's `T` and `ext_time` follow the window and schedule, so it stops at the window's last step. Its
+    `fixedBNat100` module flag stays False, as in legacy's `__main__` (the per-run gate is `params`').
+    """
+    legacy = load_legacy(detail=True)
+    if state.n_agents != legacy.n_agents:
+        raise ValueError(f"legacy is built for {legacy.n_agents} agents, the shared state has {state.n_agents}")
+    agents, nb_list = legacy_rows_from_state(legacy, state), nb_list_from_adjacency(adjacency)
+    legacy.initialise_agents = lambda init_w: agents.copy()
+    legacy.initialise_network = lambda seed, link_prob: [nbs.copy() for nbs in nb_list]
+    legacy.track_times = list(steps)
+    legacy.T = max(steps)
+    legacy.ext_time = [t for start, end in schedule.events for t in range(start, end + 1)]
+    legacy.params_fixed["lam"] = cell.get("lam", 0.0)
+    params = {**{k: cell[k] for k in ("link_prob", "init_w", "beta", "rho", "eps", "mu", "fixedBNat100")},
+              "ext_strength": pressure, "seed": seed}
+    return legacy.run_simulation(params)
+
+
+def _long_format(frame: pd.DataFrame, implementation: str, replica: int, steps: set[int]) -> pd.DataFrame:
+    frame = frame[frame.t.isin(steps)]
+    out = pd.DataFrame({"implementation": implementation, "replica": replica, "t": frame.t.astype(int).to_numpy(),
+                        "agent": frame.id.astype(int).to_numpy()})
+    return pd.concat([out, frame[list(METRICS)].reset_index(drop=True)], axis=1)
+
+
+def _shared_start_replica(implementation, load_legacy, cell, pressure, replica, state, adjacency, steps, schedule):
+    steps = set(steps)
+    if implementation == "legacy":
+        frame = _legacy_replica(load_legacy, cell, pressure, replica, state, adjacency, sorted(steps), schedule)
+    else:
+        spec = SharedStartSpec(_anb_agent(cell), ErdosRenyiNetwork, {"link_prob": cell["link_prob"]},
+                               state.n_agents, cell["rho"], state, adjacency)
+        end = max(steps)
+        config = TestbedConfig(schedule, window_len=1, recovery=max(0, end - schedule.events[-1][1]), detail=True)
+        frame = Testbed(spec, config).run(replica).frame
+    return _long_format(frame, implementation, replica, steps)
+
+
+def run_shared_start(cell: dict, pressure: float, start_seed: int = 0, k: int = 20, window=(95, 155),
+                     n_jobs: int = 1, schedule: PressureSchedule | None = None, load_legacy=None) -> pd.DataFrame:
+    """Legacy and anb from one identical t = 0 state, `k` replicas each, every step of `window` recorded.
+
+    `cell` holds `link_prob`, `init_w`, `beta`, `rho`, `eps`, `mu`, `fixedBNat100` (and optionally `lam`), as
+    `parse_filename` returns them. The state (beliefs, edge weights, adjacency, belief-change memory) is drawn once
+    from `start_seed`. Replica `r` of each implementation then runs with seed `r`: legacy on a fresh `load_legacy`
+    copy (the oracle's loader, `legacy_oracle.load_legacy` by default, so legacy is only ever reached through it),
+    anb through `Testbed`. The two RNG streams differ by design, so replicas agree in distribution only.
+
+    `schedule` defaults to the paper's single event (t = 101…150) at strength `pressure`. The runs stop at the
+    window's last step. A `fixedBNat100` cell keeps the known gate difference (known issue #8): anb stops learning at t = 101, legacy
+    one step later.
+
+    Returns long format, one row per implementation, replica, step and agent: `implementation`, `replica`, `t`,
+    `agent`, then the 14 metrics. The steps are t = 0 and every step of the (inclusive) window.
+    """
+    if load_legacy is None:
+        from legacy_oracle import load_legacy  # tests/ is on sys.path under pytest; scripts add it themselves
+    schedule = schedule or PressureSchedule.single_event(pressure)
+    steps = [0, *range(window[0], window[1] + 1)]
+    state, adjacency = build_shared_start(cell, start_seed)
+    jobs = [(implementation, load_legacy, cell, pressure, replica, state, adjacency, steps, schedule)
+            for implementation in ("legacy", "anb") for replica in range(k)]
+    runs = Parallel(n_jobs=n_jobs)(delayed(_shared_start_replica)(*job) for job in jobs)
+    return pd.concat(runs, ignore_index=True)

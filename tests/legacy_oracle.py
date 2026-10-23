@@ -10,6 +10,8 @@ from types import ModuleType
 
 import numpy as np
 
+from anb.comparison import adjacency_from_nb_list, state_from_legacy_rows
+
 LEGACY_PATH = Path(__file__).resolve().parent.parent / "ANBmodel.py"
 
 
@@ -81,25 +83,13 @@ def legacy_metrics(legacy: ModuleType, agents, nb_list, t: int, params: dict) ->
 
 def to_context(legacy: ModuleType, agents, nb_list, t: int, params: dict):
     """The same state as an `anb` `StepContext`: `AgentState`, 0/1 adjacency, ρ, and the pressure at `t`."""
-    from anb.agents import ANBAgent, AgentState
+    from anb.agents import ANBAgent
     from anb.metrics import StepContext
     from anb.model import ANBModel
     from anb.networks import ErdosRenyiNetwork
 
-    n, m = legacy.n_agents, legacy.M
-    edges = np.zeros((n, m, m))
-    rows, cols = legacy.edge_arr.T
-    edges[:, rows, cols] = agents[:, legacy.edgeids]
-    edges[:, cols, rows] = agents[:, legacy.edgeids]
-    state = AgentState(
-        beliefs=agents[:, legacy.beliefids].copy(),
-        edge_weights=edges,
-        delta_memory=agents[:, list(legacy.delbeliefids)].reshape(n, legacy.tau, m).copy(),
-        focal=np.full(n, legacy.focal, dtype=np.int64),
-    )
-    adjacency = np.zeros((n, n))
-    for i, nbs in enumerate(nb_list):
-        adjacency[i, nbs] = 1.0
+    state = state_from_legacy_rows(legacy, agents)
+    adjacency = adjacency_from_nb_list(nb_list)
     model = ANBModel(ANBAgent(), ErdosRenyiNetwork(adjacency, link_prob=np.nan), state, params["rho"])
     ext = params["ext_strength"] if t in legacy.ext_time else 0.0
     return StepContext(model, t, ext)
