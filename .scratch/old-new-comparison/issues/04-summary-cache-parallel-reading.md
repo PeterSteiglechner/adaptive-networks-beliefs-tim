@@ -6,9 +6,9 @@
 
 **Blocked by:** #02
 
-**Status:** open
+**Status:** done
 
-- [ ] A second comparison of unchanged folders reuses the cache, which a test checks through observable behaviour (e.g. no CSV reads), not through the cache layout
-- [ ] Touching, adding or removing a CSV in a cell invalidates that cell's cache
-- [ ] Results with and without the cache are identical
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] A second comparison of unchanged folders reuses the cache, which a test checks through observable behaviour (e.g. no CSV reads), not through the cache layout
+- [x] Touching, adding or removing a CSV in a cell invalidates that cell's cache
+- [x] Results with and without the cache are identical
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass

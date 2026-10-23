@@ -8,19 +8,25 @@ influence each other.
   comes from permuting the implementation labels of whole runs, so within-run correlation can't inflate it.
 - Metrics, per cell × window × metric: two-sample KS test on the run means, plus the difference of means with
   a 95 % Welch CI for reading the size of any deviation.
-- Failures: Benjamini–Hochberg q < `ALPHA`, within each family (responses, metrics).
+- Conditional responses: the same χ² test on the four classes of agents negative before pressure.
+- Lean, per cell: Welch on the run-level share positive before pressure (no KS, the distribution is bimodal).
+- Failures: Benjamini–Hochberg q < `ALPHA`, within each family (pooled responses, conditional responses, lean,
+  metrics). Tables are ranked by effect size: Cramér's V for responses, the standardised mean difference for the
+  rest.
 
-`compare_folders` pairs the CSVs of two output folders by legacy filename and runs the response test per cell.
+`compare_folders` pairs the CSVs of two output folders by legacy filename and runs these tests per cell.
 
 Plain Python, no Numba.
 """
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 
@@ -32,27 +38,39 @@ WINDOWS = {"before": 95.5, "during": 145.5, "after": 195.5}
 METRICS = ("n_nbs", "Hpers", "Hpersfoc", "Hsoc", "Hext", "tb_tot", "tb_foc", "absOm_tot", "absOm_foc", "clust",
            "bc_foc", "expI", "x_focal", "extr_nonfoc")
 RESPONSES = (*RESPONSE_COLUMNS, "unlabelled")
+NEGATIVE_RESPONSES = RESPONSE_COLUMNS[2:]  # the agents negative before pressure; the first two are positive
 
 
 def summarise_run(frame: pd.DataFrame) -> dict:
-    """One ensemble-mode frame → response counts (from the 95.5 row) and per-window run means of each metric."""
+    """One ensemble-mode frame → response counts (from the 95.5 row), the lean, and run means of each metric.
+
+    The counts of `NEGATIVE_RESPONSES` are the conditional counts. `lean` is the share positive before pressure.
+    Metrics are averaged per window (`metric@window`) and per tracked step (`metric@t<step>`).
+    """
     before = frame[frame.t == WINDOWS["before"]]
     labels = before[list(RESPONSE_COLUMNS)].astype(float).fillna(0).astype(bool)
     out = {name: int(labels[name].sum()) for name in RESPONSE_COLUMNS}
     out["unlabelled"] = int((~labels.any(axis=1)).sum())
+    out["lean"] = (out["persistPos"] + out["nonpersistPos"]) / sum(out[name] for name in RESPONSES)
     for window, t in WINDOWS.items():
         rows = frame[frame.t == t]
         for metric in METRICS:
             out[f"{metric}@{window}"] = float(np.nanmean(rows[metric].to_numpy(dtype=float)))
+    steps = frame[frame.t == frame.t.round()].groupby("t")  # the averaged rows sit at half steps
+    for t, rows in steps:
+        for metric in METRICS:
+            out[f"{metric}@t{int(t)}"] = float(np.nanmean(rows[metric].to_numpy(dtype=float)))
     return out
 
 
 def _chi2(counts_a: np.ndarray, counts_b: np.ndarray) -> np.ndarray:
-    """χ² of the 2 × K tables [a; b]; `counts_*` are `(..., K)` with categories empty in both already dropped."""
+    """χ² of the 2 × K tables [a; b]; `counts_*` are `(..., K)` with categories empty in both already dropped.
+    A group with no agents at all (possible in a permutation of conditional counts) adds nothing."""
     table = np.stack([counts_a, counts_b], axis=-2)  # (..., 2, K)
     expected = table.sum(axis=-1, keepdims=True) * table.sum(axis=-2, keepdims=True) / table.sum(
         axis=(-2, -1), keepdims=True)
-    return ((table - expected) ** 2 / expected).sum(axis=(-2, -1))
+    deviation = (table - expected) ** 2
+    return np.divide(deviation, expected, out=np.zeros_like(deviation), where=expected > 0).sum(axis=(-2, -1))
 
 
 def compare_responses(a: np.ndarray, b: np.ndarray, rng: np.random.Generator,
@@ -78,25 +96,40 @@ def compare_responses(a: np.ndarray, b: np.ndarray, rng: np.random.Generator,
     return {"chi2": observed, "p": float(p)}
 
 
-def compare_values(a: np.ndarray, b: np.ndarray) -> dict:
-    """Two-sample KS on run-level values, plus mean(b) − mean(a) with a 95 % Welch CI. NaNs are dropped."""
+def welch(a: np.ndarray, b: np.ndarray) -> dict:
+    """mean(b) − mean(a) with its SE, a 95 % Welch CI, the gap in SEs, the standardised mean difference and the
+    Welch p-value. NaNs are dropped."""
     a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
     a, b = a[~np.isnan(a)], b[~np.isnan(b)]
     diff = b.mean() - a.mean()
     var_a, var_b = a.var(ddof=1) / len(a), b.var(ddof=1) / len(b)
     se = np.sqrt(var_a + var_b)
+    pooled_sd = np.sqrt((a.var(ddof=1) * (len(a) - 1) + b.var(ddof=1) * (len(b) - 1)) / (len(a) + len(b) - 2))
     if se == 0:
-        half = 0.0
+        half, gap, p = 0.0, 0.0, 1.0
+        if diff != 0:  # no spread at all but different levels
+            gap, p = np.inf * np.sign(diff), 0.0
     else:
         dof = se**4 / (var_a**2 / (len(a) - 1) + var_b**2 / (len(b) - 1))
         half = stats.t.ppf(0.975, dof) * se
+        gap = diff / se
+        p = float(2 * stats.t.sf(abs(gap), dof))
+    smd = 0.0 if diff == 0 else diff / pooled_sd if pooled_sd > 0 else np.inf * np.sign(diff)
+    return {"mean_legacy": a.mean(), "mean_anb": b.mean(), "diff": diff, "se": se, "ci_low": diff - half,
+            "ci_high": diff + half, "gap_se": gap, "smd": smd, "p": p}
+
+
+def compare_values(a: np.ndarray, b: np.ndarray) -> dict:
+    """`welch` plus a two-sample KS on run-level values (its p-value replaces the Welch one). NaNs are dropped."""
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    out = welch(a, b)
+    a, b = a[~np.isnan(a)], b[~np.isnan(b)]
     if np.ptp(np.concatenate([a, b])) == 0:
-        ks, p = 0.0, 1.0  # both constant and equal (e.g. edge metrics of a static BN)
+        out["ks"], out["p"] = 0.0, 1.0  # both constant and equal (e.g. edge metrics of a static BN)
     else:
         result = stats.ks_2samp(a, b)
-        ks, p = float(result.statistic), float(result.pvalue)
-    return {"mean_legacy": a.mean(), "mean_anb": b.mean(), "diff": diff, "ci_low": diff - half,
-            "ci_high": diff + half, "ks": ks, "p": p}
+        out["ks"], out["p"] = float(result.statistic), float(result.pvalue)
+    return out
 
 
 def correct(table: pd.DataFrame) -> pd.DataFrame:
@@ -108,17 +141,30 @@ def correct(table: pd.DataFrame) -> pd.DataFrame:
 
 
 def response_table(legacy: pd.DataFrame, new: pd.DataFrame, rng: np.random.Generator,
-                   n_permutations: int = N_PERMUTATIONS) -> pd.DataFrame:
+                   n_permutations: int = N_PERMUTATIONS, categories: tuple[str, ...] = RESPONSES) -> pd.DataFrame:
+    """One row per cell: χ² permutation test on the run counts of `categories`, Cramér's V, and the shares."""
     rows = []
     for (config, pressure), old in legacy.groupby(["config", "pressure"], sort=False):
         cell = new[(new.config == config) & (new.pressure == pressure)]
-        a, b = old[list(RESPONSES)].to_numpy(), cell[list(RESPONSES)].to_numpy()
+        a, b = old[list(categories)].to_numpy(), cell[list(categories)].to_numpy()
         row = {"config": config, "pressure": pressure, **compare_responses(a, b, rng, n_permutations)}
-        row["cramers_v"] = float(np.sqrt(row["chi2"] / (a.sum() + b.sum())))  # 2 × K table: min(2, K) − 1 = 1
-        for k, name in enumerate(RESPONSES):
-            row[f"{name}_legacy"] = a[:, k].sum() / a.sum()
-            row[f"{name}_anb"] = b[:, k].sum() / b.sum()
+        total = a.sum() + b.sum()
+        row["cramers_v"] = float(np.sqrt(row["chi2"] / total)) if total else 0.0  # 2 × K table: min(2, K) − 1 = 1
+        for k, name in enumerate(categories):
+            row[f"{name}_legacy"] = a[:, k].sum() / a.sum() if a.sum() else np.nan
+            row[f"{name}_anb"] = b[:, k].sum() / b.sum() if b.sum() else np.nan
         rows.append(row)
+    return correct(pd.DataFrame(rows))
+
+
+def lean_table(legacy: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
+    """One row per cell: Welch on the run-level share positive before pressure, the gap in SEs and the SMD."""
+    rows = []
+    for (config, pressure), old in legacy.groupby(["config", "pressure"], sort=False):
+        cell = new[(new.config == config) & (new.pressure == pressure)]
+        w = welch(old.lean, cell.lean)
+        rows.append({"config": config, "pressure": pressure, "lean_legacy": w.pop("mean_legacy"),
+                     "lean_anb": w.pop("mean_anb"), **w})
     return correct(pd.DataFrame(rows))
 
 
@@ -191,38 +237,110 @@ class Pairing:
 
 @dataclass
 class Comparison:
-    """What `compare_folders` found: the pairing, one summary row per matched run and side, and the tables."""
+    """What `compare_folders` found: the pairing, one summary row per matched run and side, the four test tables
+    and `top_differences`, which stacks them ranked by `effect`."""
     pairing: Pairing
     old: pd.DataFrame
     new: pd.DataFrame
     pooled_responses: pd.DataFrame = field(default_factory=pd.DataFrame)
+    conditional_responses: pd.DataFrame = field(default_factory=pd.DataFrame)
+    lean: pd.DataFrame = field(default_factory=pd.DataFrame)
+    metrics: pd.DataFrame = field(default_factory=pd.DataFrame)
+    top_differences: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
 def _stems(folder: Path) -> set[str]:
     return {path.stem for path in Path(folder).glob("sim_*.csv")}
 
 
-def _summaries(folder: Path, stems: list[str]) -> pd.DataFrame:
-    rows = []
+def _summarise_file(path: Path) -> dict:
+    return summarise_run(pd.read_csv(path))
+
+
+def _cell_key(folder: Path, stems: list[str]) -> str:
+    """Identifies a cell's files and their state (names, modification times, sizes) and what a summary holds, so
+    a change to the folder or to the summarised columns misses the cache."""
+    parts = [str(folder.resolve()), repr((METRICS, WINDOWS, RESPONSES))]
     for stem in stems:
+        stat = (folder / f"{stem}.csv").stat()
+        parts.append(f"{stem}:{stat.st_mtime_ns}:{stat.st_size}")
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def _summaries(folder: Path, stems: list[str], cache_dir: Path | None = None, n_jobs: int = -1) -> pd.DataFrame:
+    """One summary row per run. With `cache_dir`, each cell's rows are stored under (folder, cell) and reused
+    while the cell's files are unchanged; the other cells' CSVs are read in parallel."""
+    folder = Path(folder)
+    cells: dict[str, list[str]] = {}
+    for stem in stems:
+        cells.setdefault(re.sub(r"_seed\d+", "", stem), []).append(stem)
+    frames, todo = {}, {}
+    for cell_name, members in cells.items():
+        entry = None
+        if cache_dir is not None:
+            token = hashlib.sha256(f"{folder.resolve()}|{cell_name}".encode()).hexdigest()[:24]
+            entry = Path(cache_dir) / f"{token}.pkl", _cell_key(folder, members)
+            try:
+                cached = pd.read_pickle(entry[0])
+                if cached["key"] == entry[1]:
+                    frames[cell_name] = cached["rows"]
+                    continue
+            except Exception:  # missing or unreadable cache file: rebuild
+                pass
+        todo[cell_name] = entry
+    jobs = [(name, stem) for name in todo for stem in cells[name]]
+    summaries = Parallel(n_jobs=n_jobs)(delayed(_summarise_file)(folder / f"{stem}.csv") for _, stem in jobs)
+    rows: dict[str, list[dict]] = {name: [] for name in todo}
+    for (name, stem), summary in zip(jobs, summaries):
         cell, seed = parse_filename(stem)
-        summary = summarise_run(pd.read_csv(Path(folder) / f"{stem}.csv"))
-        rows.append({"config": cell_label(cell), "pressure": cell["ext_strength"], "seed": seed, **summary})
-    return pd.DataFrame(rows)
+        rows[name].append({"config": cell_label(cell), "pressure": cell["ext_strength"], "seed": seed, **summary})
+    for name, entry in todo.items():
+        frames[name] = pd.DataFrame(rows[name])
+        if entry is not None:
+            entry[0].parent.mkdir(parents=True, exist_ok=True)
+            partial = entry[0].with_suffix(".tmp")
+            pd.to_pickle({"key": entry[1], "rows": frames[name]}, partial)
+            partial.replace(entry[0])  # atomic, so an interrupted run never leaves a truncated cache file
+    return pd.concat([frames[name] for name in cells], ignore_index=True)
 
 
 def compare_folders(old: str | Path, new: str | Path, permutation_seed: int = 0,
-                    n_permutations: int = N_PERMUTATIONS) -> Comparison:
+                    n_permutations: int = N_PERMUTATIONS, cache_dir: str | Path | None = None,
+                    n_jobs: int = -1) -> Comparison:
     """Compare two ensemble output folders. Files are paired by name; those in one folder only are reported.
 
-    The pooled response table has one row per cell (config × pressure), ranked by Cramér's V, with the
-    Benjamini–Hochberg `q` of its permutation test alongside. Writes nothing.
+    Four tables, one row per cell (metrics: per cell × window × metric), each corrected with Benjamini–Hochberg
+    within itself and ranked by effect size, with `q` alongside: pooled responses and conditional responses
+    (Cramér's V), lean and metrics (|SMD|). `top_differences` merges them. Run summaries are read with `n_jobs` workers; with `cache_dir` they
+    are cached per (folder, cell) and rebuilt for any cell whose files changed. Writes nothing else.
     """
     in_old, in_new = _stems(old), _stems(new)
     pairing = Pairing(sorted(in_old & in_new), sorted(in_old - in_new), sorted(in_new - in_old))
     if not pairing.matched:
         raise ValueError(f"no CSV files with the same name in {old} and {new}")
-    legacy, anb = _summaries(Path(old), pairing.matched), _summaries(Path(new), pairing.matched)
+    legacy = _summaries(Path(old), pairing.matched, cache_dir, n_jobs)
+    anb = _summaries(Path(new), pairing.matched, cache_dir, n_jobs)
     rng = np.random.default_rng(permutation_seed)
     pooled = response_table(legacy, anb, rng, n_permutations)
-    return Comparison(pairing, legacy, anb, pooled.sort_values("cramers_v", ascending=False, ignore_index=True))
+    conditional = response_table(legacy, anb, rng, n_permutations, NEGATIVE_RESPONSES)
+    lean = lean_table(legacy, anb)
+    metrics = metric_table(legacy, anb)
+    pooled = pooled.sort_values("cramers_v", ascending=False, ignore_index=True)
+    conditional = conditional.sort_values("cramers_v", ascending=False, ignore_index=True)
+    lean = lean.iloc[(-lean.smd.abs()).argsort(kind="stable")].reset_index(drop=True)
+    metrics = metrics.iloc[(-metrics.smd.abs()).argsort(kind="stable")].reset_index(drop=True)
+    return Comparison(pairing, legacy, anb, pooled, conditional, lean, metrics,
+                      _top_differences(pooled, conditional, lean, metrics))
+
+
+def _top_differences(pooled, conditional, lean, metrics) -> pd.DataFrame:
+    """The four families stacked: family, cell, what was tested (`detail`), `effect` (≥ 0), `q` and `fail`."""
+    parts = []
+    for family, table in (("pooled responses", pooled), ("conditional responses", conditional)):
+        parts.append(table.assign(family=family, detail="", effect=table.cramers_v))
+    parts.append(lean.assign(family="lean", detail="share positive", effect=lean.smd.abs()))
+    parts.append(metrics.assign(family="metrics", detail=metrics.metric + "@" + metrics.window,
+                                effect=metrics.smd.abs()))
+    columns = ["family", "config", "pressure", "detail", "effect", "q", "fail"]
+    top = pd.concat([part[columns] for part in parts], ignore_index=True)
+    return top.iloc[(-top.effect).argsort(kind="stable")].reset_index(drop=True)
