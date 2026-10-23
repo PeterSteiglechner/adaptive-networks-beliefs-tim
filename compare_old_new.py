@@ -12,8 +12,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from anb.agents import ANBAgent
 from anb.comparison import (METRICS, NEGATIVE_RESPONSES, PAPER_CONFIGS, RESPONSES, compare_folders, metric_series,
-                            response_shares, top_cells)
+                            response_shares, save_under_legacy_names, top_cells)
+from anb.model import ModelSpec
+from anb.networks import ErdosRenyiNetwork
+from anb.testbed import PressureSchedule, Testbed, TestbedConfig
 
 # %%
 OLD_FOLDER = Path(os.environ.get("COMPARE_OLD", "simOut_old_model"))
@@ -21,7 +25,25 @@ NEW_FOLDER = Path(os.environ.get("COMPARE_NEW", "simOut_new_model"))
 OUT_FOLDER = Path(os.environ.get("COMPARE_OUT", "compare_out"))
 TOP_K = int(os.environ.get("COMPARE_TOP_K", 10))
 N_PERMUTATIONS = int(os.environ.get("COMPARE_N_PERMUTATIONS", 10_000))
-RUN_ABLATIONS = False  # the ablation cell arrives with its own ticket
+PRESSURES = (0, 1, 2, 4, 8, 16)
+N_JOBS = int(os.environ.get("COMPARE_N_JOBS", -1))
+
+# Ablation: anb with the t = 101 gate set back to legacy's (`learning_until = 102`) for the adaptive→static config,
+# saved under that config's file names and compared with the old folder.
+RUN_ABLATIONS = bool(int(os.environ.get("COMPARE_RUN_ABLATIONS", 0)))
+ABLATION_FOLDER = Path(os.environ.get("COMPARE_ABLATION", "simOut_ablation_learning102"))
+ABLATION_SEEDS = range(int(os.environ.get("COMPARE_ABLATION_SEEDS", 100)))
+ABLATION_LEARNING_UNTIL = 102
+
+# Rerun: selected μ cells (the adaptive config at these μ, eps = 1, init_w = 0.2) with more seeds. Legacy has to be
+# rerun over the same seeds into RERUN_OLD_FOLDER first (`ANBmodel.py`, `__main__` block), as files are paired by
+# name, seed included.
+RUN_RERUN = bool(int(os.environ.get("COMPARE_RUN_RERUN", 0)))
+RERUN_MUS = (0.1,)
+RERUN_PRESSURES = PRESSURES
+RERUN_SEEDS = range(int(os.environ.get("COMPARE_RERUN_SEEDS", 1000)))
+RERUN_OLD_FOLDER = Path(os.environ.get("COMPARE_RERUN_OLD", "simOut_old_model_rerun"))
+RERUN_NEW_FOLDER = Path(os.environ.get("COMPARE_RERUN_NEW", "simOut_new_model_rerun"))
 RUN_SHARED_START = False  # the shared-start cell arrives with its own ticket
 
 # %%
@@ -159,3 +181,43 @@ for config, pressure in top_cells(result.top_differences, TOP_K):
     fig.suptitle(f"{config}, pressure {pressure:g}")
     fig.supxlabel("t")
     save(fig, f"timeseries_{re.sub(r'[^A-Za-z0-9.]+', '_', config)}_pressure{pressure:g}.png")
+
+# %%
+# Ablation and rerun cells. Both save a normal output folder and go through `compare_folders`; their tables are
+# written to `compare_out/<name>/`.
+def adaptive_testbed(mu: float, pressure: float, learning_until: int | None = None) -> Testbed:
+    agent = ANBAgent(beta=3.0, eps=1.0, mu=mu, init_w=0.2, learning_until=learning_until)
+    spec = ModelSpec(agent, ErdosRenyiNetwork, {"link_prob": 0.1}, n_agents=100, rho=1 / 3)
+    return Testbed(spec, TestbedConfig(PressureSchedule.single_event(pressure)))
+
+
+def compare_and_write(old: Path, new: Path, name: str, expected_files: int):
+    folder = OUT_FOLDER / name
+    folder.mkdir(parents=True, exist_ok=True)
+    res = compare_folders(old, new, n_permutations=N_PERMUTATIONS, cache_dir=OUT_FOLDER / "cache", n_jobs=N_JOBS)
+    for table_name, table in {"pooled_responses": res.pooled_responses, "conditional_responses": res.conditional_responses,
+                              "lean": res.lean, "metrics": res.metrics, "top_differences": res.top_differences}.items():
+        table.to_csv(folder / f"{table_name}.csv", index=False)
+        (folder / f"{table_name}.md").write_text(markdown_table(table) + "\n")
+    assert len(res.pairing.matched) == expected_files and not res.pairing.only_new, (
+        f"{name}: {len(res.pairing.matched)} of {expected_files} files paired, {len(res.pairing.only_new)} only in new")
+    print(f"{name}: {len(res.pairing.matched)} files matched\n" + markdown_table(res.top_differences.head(TOP_K)))
+    return res
+
+
+# %%
+if RUN_ABLATIONS:
+    for pressure in PRESSURES:
+        bed = adaptive_testbed(mu=0.0, pressure=pressure, learning_until=ABLATION_LEARNING_UNTIL)
+        save_under_legacy_names(bed, ABLATION_SEEDS, ABLATION_FOLDER, n_jobs=N_JOBS, fixedBNat100=True)
+    ablation = compare_and_write(OLD_FOLDER, ABLATION_FOLDER, "ablation_learning_until",
+                                len(PRESSURES) * len(ABLATION_SEEDS))
+
+# %%
+# `skip_existing` resumes an interrupted rerun; delete RERUN_NEW_FOLDER after changing the model.
+if RUN_RERUN:
+    for mu in RERUN_MUS:
+        for pressure in RERUN_PRESSURES:
+            adaptive_testbed(mu, pressure).save_ensemble(RERUN_SEEDS, RERUN_NEW_FOLDER, n_jobs=N_JOBS, skip_existing=True)
+    rerun = compare_and_write(RERUN_OLD_FOLDER, RERUN_NEW_FOLDER, "rerun",
+                        len(RERUN_MUS) * len(RERUN_PRESSURES) * len(RERUN_SEEDS))

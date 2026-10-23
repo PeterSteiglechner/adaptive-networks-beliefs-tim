@@ -21,6 +21,8 @@ Plain Python, no Numba.
 
 import hashlib
 import re
+import shutil
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -30,6 +32,7 @@ from joblib import Parallel, delayed
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 
+from anb.io import legacy_filename
 from anb.metrics import RESPONSE_COLUMNS
 
 ALPHA = 0.05
@@ -335,6 +338,27 @@ def compare_folders(old: str | Path, new: str | Path, permutation_seed: int = 0,
     metrics = metrics.iloc[(-metrics.smd.abs()).argsort(kind="stable")].reset_index(drop=True)
     return Comparison(pairing, legacy, anb, pooled, conditional, lean, metrics,
                       _top_differences(pooled, conditional, lean, metrics))
+
+
+def save_under_legacy_names(testbed, seeds, out_dir, n_jobs: int = 1, **names_as) -> list[Path]:
+    """Run `testbed` for `seeds` and save each run under the legacy file name of its cell, so `compare_folders` can pair it.
+
+    A run with a gate that has no legacy name (`learning_until = 102`, the ablation of the t = 101 difference) can't
+    be named by `legacy_filename`. Its parameters are named with `learning_until` dropped and `names_as` applied
+    (`fixedBNat100=True` files the run under the adaptive→static cell it stands in for). The CSV columns stay the run's
+    own. Don't mix such a folder with real runs of the cell it is named after.
+    """
+    params = {k: v for k, v in testbed.params().items() if k != "learning_until"} | names_as
+    legacy_filename({**params, "seed": 0}, detail=False)  # fail before the ensemble runs if the cell has no legacy name
+    with tempfile.TemporaryDirectory() as scratch:
+        written = testbed.save_ensemble(seeds, scratch, n_jobs=n_jobs, legacy_names=False)
+        paths = []
+        for seed, path in zip(seeds, written):
+            target = Path(out_dir) / f"{legacy_filename({**params, 'seed': seed}, detail=False)}.csv"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(path, target)
+            paths.append(target)
+    return paths
 
 
 # Plot data

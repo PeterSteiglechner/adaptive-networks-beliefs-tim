@@ -10,10 +10,10 @@ Neither needs a new code path in the model.
 
 **Blocked by:** #05
 
-**Status:** open
+**Status:** done
 
-- [ ] The ablation cell produces its own output folder and a comparison against old using the same tables
-- [ ] The rerun cell is configured by constants (cells and seeds) and goes through the same comparison
-- [ ] Structural test: a `learning_until = 102` run still changes edge weights at t = 101 and stops afterwards
-- [ ] `ANBmodel.py` and `Testbed` are not modified
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] The ablation cell produces its own output folder and a comparison against old using the same tables
+- [x] The rerun cell is configured by constants (cells and seeds) and goes through the same comparison
+- [x] Structural test: a `learning_until = 102` run still changes edge weights at t = 101 and stops afterwards
+- [x] `ANBmodel.py` and `Testbed` are not modified
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
