@@ -9,9 +9,9 @@
 
 **Blocked by:** #05
 
-**Status:** open
+**Status:** done
 
-- [ ] All three plot families are written to `compare_out/`
-- [ ] Every plot shows confidence bands
-- [ ] The top-k cells for the time series come from the combined top-differences table
-- [ ] The smoke test also checks that the plot files exist
+- [x] All three plot families are written to `compare_out/`
+- [x] Every plot shows confidence bands
+- [x] The top-k cells for the time series come from the combined top-differences table
+- [x] The smoke test also checks that the plot files exist
