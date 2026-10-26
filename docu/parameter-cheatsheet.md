@@ -2,7 +2,9 @@
 
 Every parameter of the ANB model in one place: what it does, which equation it belongs to, and where to set it,
 in legacy `ANBmodel.py` and in the `anb/` package. The equations come from the paper ([ANB.md](ANB.md)). For the
-derivations and implementation detail, see [model.md](model.md).
+derivations and implementation detail, see [model.md](model.md). The second half,
+[Metrics](#metrics-what-is-measured-and-where-it-is-used), covers every output column and derived quantity and
+links to the places in the analysis scripts that use it.
 
 ## The four equations
 
@@ -192,3 +194,183 @@ These set *when* things happen and what is measured. None of them is in an equat
 | whether edge weights stay bounded | $\lambda$ |
 | how tightly beliefs are coupled from the start | $\omega_0$ |
 | whether the BN can still rewire under pressure | `fixedBNat100` / `learning_until` |
+
+## Metrics: what is measured and where it is used
+
+The model writes 14 metric columns and 6 response dummies per agent. The analysis scripts derive a few more
+quantities from them. This section explains each one and links to where it matters in the analysis. For the
+formulas next to the paper's Table 2, see also [model.md §8](model.md#8-metrics-get_energies-get_metrics-fill_metrics)
+and [§9](model.md#9-response-classification-get_output). For which figure each script makes, see
+[analysis.md](analysis.md).
+
+**When metrics are computed.** Only at the tracked steps (`track_times`, legacy
+[L468](../ANBmodel.py#L468), `TestbedConfig.track_times()` in `anb`). In ensemble files, the rows `t = 95.5`,
+`145.5` and `195.5` hold the **window means** over t = 91–100, 141–150 and 191–200, so count metrics such as
+`tb_foc` are not integers there. The rows `t = 0`, `100` and `200` are snapshots. Almost all analysis uses the
+"before" row `t = 95.5`: the paper asks which pre-pressure properties predict the response.
+
+### Per-agent metric columns
+
+Column order as in legacy `metric_cols` ([L83](../ANBmodel.py#L83)) and `anb` `default_metrics()`
+([metrics.py L314](../anb/metrics.py#L314)). The label is the one the analysis scripts print
+(`metric2titleVerb` / `metric2title`, [analyse_BNmetrics.py L41–72](../analyse_BNmetrics.py#L41)).
+
+| Column | Label in figures/tables | Definition | Range (M = 10) | Legacy | `anb` |
+|--------|-------------------------|------------|----------------|--------|-------|
+| `n_nbs` | nr social contacts, $\lvert\mathcal K\rvert$ | number of neighbours in the social network | 0…N−1, ≈ 10 | [`fill_metrics` L301](../ANBmodel.py#L301) | [`Degree`](../anb/metrics.py#L40) |
+| `x_focal` | focal belief, $x_{foc}$ | the focal belief itself | −1…1 | [L315](../ANBmodel.py#L315) | [`FocalBelief`](../anb/metrics.py#L47) |
+| `extr_nonfoc` | extremity non-focal beliefs, $\lvert X_{non\text{-}foc}\rvert$ | $\frac1{M-1}\sum_{m\ne foc}\lvert x_m\rvert$ | 0…1 | [L316](../ANBmodel.py#L316) | [`NonFocalExtremity`](../anb/metrics.py#L205) |
+| `absOm_tot` | connectedness BN, BN-$\lvert\Omega\rvert$ | mean $\lvert\omega_{mn}\rvert$ over all 45 edges | ≥ 0, unbounded | [`get_metrics` L258](../ANBmodel.py#L258) | [`MeanAbsEdge`](../anb/metrics.py#L261) |
+| `absOm_foc` | connectedness focal BN, BN-$\lvert\Omega_{foc}\rvert$ | mean $\lvert\omega_{foc,m}\rvert$ over the 9 focal edges | ≥ 0 | [L259](../ANBmodel.py#L259) | [`FocalMeanAbsEdge`](../anb/metrics.py#L270) |
+| `tb_tot` | balance BN, BN-$\alpha$ | number of balanced triangles, $\omega_{ab}\omega_{ac}\omega_{bc}>0$ | 0…120 | [L245](../ANBmodel.py#L245) | [`TriangleBalance`](../anb/metrics.py#L239) |
+| `tb_foc` | balance focal BN, BN-$\alpha_{foc}$ | balanced triangles that contain the focal belief | 0…36 | [L245](../ANBmodel.py#L245) | [`FocalTriangleBalance`](../anb/metrics.py#L249) |
+| `clust` | clustering BN, BN-clust | Onnela weighted clustering on $\lvert\omega\rvert$ $\max\lvert\omega\rvert$, mean over nodes | 0…1 | [L262–276](../ANBmodel.py#L262) | [`WeightedClustering`](../anb/metrics.py#L280) |
+| `bc_foc` | centrality focal BN, BN-centr$_{foc}$ | unnormalised betweenness of the focal node, path length $1/(\lvert\omega\rvert+10^{-6})$ | 0…36 | [L281](../ANBmodel.py#L281) | [`FocalBetweenness`](../anb/metrics.py#L117) |
+| `Hpers` | – (only via `Hpersnonfoc`) | personal dissonance, $-\sum_{m<n}\omega_{mn}x_mx_n$ | any sign | [`get_energies` L200](../ANBmodel.py#L200) | [`PersonalEnergy`](../anb/metrics.py#L64) |
+| `Hpersfoc` | dissonance focal BN, $D_\mathrm{BN\text{-}foc}$ | $-x_{foc}\sum_{m\ne foc}\omega_{foc,m}x_m$ | any sign | [L214](../ANBmodel.py#L214) | [`FocalPersonalEnergy`](../anb/metrics.py#L74) |
+| `Hsoc` | dissonance focal social, $D_{social}$ | $-\rho\,x_{foc}\cdot\mathrm{mean}_k x^{(k)}_{foc}$, 0 without neighbours | $-\rho…\rho$ | [L230](../ANBmodel.py#L230) | [`SocialEnergy`](../anb/metrics.py#L84) |
+| `Hext` | – (not analysed) | $-s\,x_{foc}$ in pressure steps, else 0 | $-s…s$ | [L222](../ANBmodel.py#L222) | [`ExternalEnergy`](../anb/metrics.py#L108) |
+| `expI` | – (not analysed) | expected influence, $\sum_m\omega_{foc,m}x_m$ (the BN part of the focal local field) | any sign | [L278](../ANBmodel.py#L278) | [`ExpectedInfluence`](../anb/metrics.py#L305) |
+
+For all dissonance columns, **lower (more negative) means less dissonance**, i.e. a more coherent state.
+
+### What each metric tells you, and where it matters
+
+The analysis scripts use the metrics in a few fixed sets. They are referred to by name below:
+
+- **Table set** `metrics_table_sort` ([analyse_BNmetrics.py L123](../analyse_BNmetrics.py#L123)): the 12 rows of
+  Table 3 / A1–A5, the panels of Fig. 5, and the axes of the correlation heatmap Fig. A4.
+- **Effect-size set** `selected_metricsl_cols` ([L107](../analyse_BNmetrics.py#L107)): the same 12 metrics, used
+  for Cohen's d in Fig. 4.
+- **Regression set** `dependent_vars` + `control_vars` ([L448–459](../analyse_BNmetrics.py#L448)): the logit
+  predictors `n_nbs, tb_foc, absOm_foc, clust, bc_foc` with control `x_focal`. Despite the name, these are the
+  predictors, not the dependent variable.
+
+Usage links, by place in the analysis:
+
+| Where | File and line |
+|-------|---------------|
+| Table 3 / A1–A4 (by response, before window) | [analyse_BNmetrics.py L217](../analyse_BNmetrics.py#L217) |
+| Table A5 (before/during/after, $s = 4$) | [L267](../analyse_BNmetrics.py#L267) |
+| Fig. 5 (metric change over time) | [L323](../analyse_BNmetrics.py#L323) |
+| Fig. 4 Cohen's d | [L429–437](../analyse_BNmetrics.py#L429) |
+| Fig. 4 logit coefficients, Tables A6/A7 | [L448–512](../analyse_BNmetrics.py#L448) |
+| Fig. A4 correlation heatmap | [L811](../analyse_BNmetrics.py#L811) |
+| greedy uncorrelated subset (predictor choice) | [L849](../analyse_BNmetrics.py#L849) |
+| Fig. 6C (metrics vs. $\mu$) | [analyse_socialAdaptation.py L385](../analyse_socialAdaptation.py#L385) |
+
+**Beliefs**
+
+- **`x_focal`** is the quantity the pressure acts on. All responses are defined from its window means. In the
+  regression it is the **control variable**: a more negative focal belief needs a larger push to cross 0, so
+  any BN effect must be shown on top of it. It is in the table set and the greedy subset. Fig. 4 shows its Cohen's d bar but leaves it out of the
+  logit overlay, because it is the control ([L667–670](../analyse_BNmetrics.py#L667)).
+- **`extr_nonfoc`** measures how settled the rest of the belief system is. Extreme non-focal beliefs feed a
+  strong, stable field into the focal belief through the BN. It is in the table, effect-size and greedy sets,
+  but not a regression predictor (commented out at [L457](../analyse_BNmetrics.py#L457)).
+
+**Social embedding**
+
+- **`n_nbs`** is the size of $\mathcal K$. The social field on $x_{foc}$ is a **sum** over neighbours, so more
+  contacts mean a stronger pull towards the neighbourhood's focal beliefs. It is constant over
+  time, because the network is fixed. It is a regression predictor and is in all sets. This is the metric that
+  changing the network type moves most directly, so it is the main link from this project's network extension
+  to the response analysis.
+- **`Hsoc`** is the agreement between the focal belief and the neighbours' **mean** focal belief. Negative means
+  the agent agrees with its neighbourhood. It is in the table and effect-size sets, not in the regression. Because
+  it uses the mean, it doesn't scale with `n_nbs` the way the dynamics do ([known-issues.md #1](known-issues.md)).
+
+**Belief-network structure (whole BN)**
+
+- **`absOm_tot`** is how tightly the beliefs are coupled overall. With `eps = 0` it stays at $\omega_0$ and
+  separates static-low from static-high. Beyond the table set, it is used in
+  [analyse_responseFrequencies.py L452](../analyse_responseFrequencies.py#L452) (mean $\lvert\omega\rvert$ per BN
+  configuration, quoted in the paper text). It is not a regression predictor, because it correlates strongly with
+  `absOm_foc` (Fig. A4).
+- **`tb_tot`** counts the triangles that can be satisfied all at once. A balanced BN has a coherent "camp"
+  structure and therefore deep, stable dissonance minima. It is in the table set and printed for the two example
+  agents of Fig. 2 ([analyse_timeseries.py L394](../analyse_timeseries.py#L394)). It is excluded from the regression
+  because it correlates with `tb_foc`.
+- **`clust`** measures how strongly the neighbours of a belief are tied to each other. It is a regression
+  predictor and is plotted vs. $\mu$ in Fig. 6C. For an all-zero BN it is NaN.
+
+**Embedding of the focal belief**
+
+- **`absOm_foc`** is how strongly the focal belief is anchored by the other beliefs. Strong focal edges oppose
+  any push that would create dissonance with the rest of the BN. It is a regression predictor and is in Fig. 6C.
+- **`tb_foc`** is the balance of the focal belief's own triangles. If they are balanced, flipping $x_{foc}$
+  breaks many triangles at once, so the BN pulls it back after the pressure (resilience). It is a regression
+  predictor, is in Fig. 6C, is the quick-look plot vs. $\mu$ at
+  [analyse_socialAdaptation.py L587](../analyse_socialAdaptation.py#L587), and is printed in Fig. 2
+  ([analyse_timeseries.py L395](../analyse_timeseries.py#L395)).
+- **`bc_foc`** says whether the focal belief lies on the strong paths between other beliefs, i.e. whether it
+  is a hub that relays influence in the BN. It is a regression predictor.
+
+**Dissonance**
+
+- **`Hpers`** is not analysed directly. Both scripts replace it by `Hpersnonfoc = Hpers − Hpersfoc`
+  ([analyse_BNmetrics.py L194](../analyse_BNmetrics.py#L194),
+  [analyse_socialAdaptation.py L245](../analyse_socialAdaptation.py#L245)) and drop it. It is only printed for
+  the Fig. 2 agents ([analyse_timeseries.py L438](../analyse_timeseries.py#L438)).
+- **`Hpersfoc`** is how well the focal belief fits the rest of the BN. Negative means it fits. A misaligned
+  agent (before < 0) whose BN supports the negative value has low `Hpersfoc`, so it has much to lose by
+  complying. It is in the table and effect-size sets.
+- **`Hpersnonfoc`** (derived) is the dissonance among the non-focal beliefs only. It is in the table and
+  effect-size sets.
+
+**Collected but not used in any analysis**
+
+- **`Hext`** is 0 in the before window by definition, so it says nothing about pre-pressure differences. It is
+  only loaded ([analyse_BNmetrics.py L95](../analyse_BNmetrics.py#L95)).
+- **`expI`** is the BN part of the focal local field, which overlaps with `Hpersfoc` ($\texttt{Hpersfoc} = -x_{foc}\cdot\texttt{expI}$).
+  It is only loaded ([L103](../analyse_BNmetrics.py#L103)).
+
+All 14 columns are compared between legacy and `anb` in the validation ([anb/comparison.py L48](../anb/comparison.py#L48),
+[validation.md](validation.md)), so keep them even though two are unused.
+
+### Response dummies
+
+0/1 columns, stored only on the `t = 95.5` row of ensemble files (on the last step in detailed files). They are
+computed from the focal belief's means over the before (b), during (d) and after (a) windows. Legacy computes
+them in [`get_output` L403–413](../ANBmodel.py#L403), `anb` in [`ResponseClassifier`](../anb/metrics.py#L326).
+
+| Column | Condition | Meaning |
+|--------|-----------|---------|
+| `persistPos` | b ≥ 0, d ≥ 0, a ≥ 0 | already aligned, stays aligned |
+| `nonpersistPos` | b ≥ 0, a < 0 | already aligned, ends negative |
+| `compliant` | b < 0, d ≥ 0, a ≥ 0 | **compliance**: lasting change |
+| `resilient` | b < 0, d ≥ 0, a < 0 | **resilience**: changes during the pressure, reverts afterwards |
+| `resistant` | b < 0, d < 0, a < 0 | **resistance**: never changes |
+| `latecompliant` | b < 0, d < 0, a > 0 | changes only after the pressure (rare) |
+
+Only the misaligned agents (b < 0) are analysed. The boundary cases at exactly 0 are listed in
+[known-issues.md #9](known-issues.md).
+
+Where they matter:
+
+- **Relative response frequency** = count ÷ (compliant + resilient + resistant [+ latecompliant]) per simulation.
+  This is the y-axis of Fig. 3B–E ([analyse_responseFrequencies.py L158](../analyse_responseFrequencies.py#L158)),
+  Fig. 6D ([analyse_socialAdaptation.py L231](../analyse_socialAdaptation.py#L231), without `latecompliant` in the
+  denominator) and Fig. A8 ([analyse_sensitivity.py L161](../analyse_sensitivity.py#L161)).
+- **Response label per agent**: [analyse_BNmetrics.py L176–189](../analyse_BNmetrics.py#L176) copies the
+  `t = 95.5` label to the during and after rows. It groups Tables 3/A1–A5 and Fig. 5, and defines the two
+  contrasts of Fig. 4: `rR-C` (resistant + resilient vs. compliant) and `R-r` (resistant vs. resilient)
+  ([L462–475](../analyse_BNmetrics.py#L462)). `latecompliant` counts as compliant in `rR-C`.
+- `persistPos` and `nonpersistPos` are loaded everywhere but not plotted.
+
+### Derived population-level quantities
+
+These are computed in the analysis scripts per simulation, mostly from the edge columns at the `t = 100`
+snapshot. They are not saved by the model.
+
+| Name | Definition | Where | Used for |
+|------|------------|-------|----------|
+| `Hpersnonfoc` | `Hpers − Hpersfoc`, per agent | [analyse_BNmetrics.py L194](../analyse_BNmetrics.py#L194), [analyse_socialAdaptation.py L245](../analyse_socialAdaptation.py#L245) | tables, Fig. 4, Fig. 5, Fig. A4 |
+| BN heterogeneity (`mean`, z-scored as `meanR`) | mean pairwise Euclidean distance between the agents' 45-edge vectors | [analyse_socialAdaptation.py L187–190](../analyse_socialAdaptation.py#L187), [L369](../analyse_socialAdaptation.py#L369) | Fig. 6C: BNs become alike as $\mu$ grows |
+| `groupishness` (social adaptation) | var / mean of those Euclidean distances, 0 if `eps = 0` | [analyse_socialAdaptation.py L188](../analyse_socialAdaptation.py#L188) | stored in `relres`, not plotted |
+| `groupishness` (response frequencies) | std / mean of the pairwise **Manhattan** distances, 0 if `eps = 0` | [analyse_responseFrequencies.py L72–73](../analyse_responseFrequencies.py#L72) | computed, not plotted. The two scripts define it differently. |
+| `var`, `kurtosis` | std and negative kurtosis of the Euclidean distances | [analyse_socialAdaptation.py L189–191](../analyse_socialAdaptation.py#L189) | stored, not plotted (`var` is actually the std) |
+| `nr_negative_edges` | number of edges < 0 across all agents | [analyse_socialAdaptation.py L186](../analyse_socialAdaptation.py#L186) | stored, not plotted |
+| `mean_abs_edges` / `mean_absedges` | mean $\lvert\omega\rvert$ (and mean $\omega$) over all agents and edges | [analyse_responseFrequencies.py L96](../analyse_responseFrequencies.py#L96), [analyse_socialAdaptation.py L215](../analyse_socialAdaptation.py#L215) | bar plot per BN config and the summary at [L452](../analyse_responseFrequencies.py#L452) |
+| `std_focal` | std of the focal beliefs across agents at `t = 100` | [analyse_responseFrequencies.py L74](../analyse_responseFrequencies.py#L74) | polarisation $\sigma_{foc}$ in the paper text, summary at [L448](../analyse_responseFrequencies.py#L448) |
+| `nr_negs` | agents with a before-mean < 0, i.e. the misaligned agents | [analyse_responseFrequencies.py L75](../analyse_responseFrequencies.py#L75) | stored, not plotted |
