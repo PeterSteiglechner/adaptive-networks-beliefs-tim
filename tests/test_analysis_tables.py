@@ -1,7 +1,7 @@
 """`anb.analysis` Tables 3, A1–A7, `save_table` and the greedy metric subset, on the folder of `sim_folder.py`.
 
-The fixture's paper base has the adaptive config at s ∈ {0, 1, 4} × seeds {0, 1, 2} (μ = 0 only). The `link_prob 0.2`
-base has adaptive at s = 4 only, so it lacks the s = 0 reference. The expected LaTeX is built here the way the old
+The fixture's paper base has the adaptive config at s ∈ {0, 1, 4} × seeds {0, 1, 2} for μ = 0, and μ ∈ {0.005, 0.2}
+at s = 4 for seed 1 only. The `link_prob 0.2` base has adaptive at s = 4 only, so it lacks the s = 0 reference. The expected LaTeX is built here the way the old
 script printed it, from the CSVs read directly.
 """
 
@@ -127,7 +127,7 @@ def test_table3_without_the_pressure_is_not_applicable(sim_dir):
 
 def test_table3_at_a_missing_mu_is_not_applicable(sim_dir):
     with pytest.warns(FigureNotApplicable):
-        assert table3(sim_dir, s=4, mu=0.005) is None
+        assert table3(sim_dir, s=4, mu=0.05) is None
 
 
 def test_table3_at_s0_is_an_error(sim_dir):
@@ -216,7 +216,7 @@ def test_tableA7_without_any_pressure_of_the_second_contrast_is_not_applicable(s
 def test_the_fit_tables_at_a_missing_mu_are_not_applicable(sim_dir):
     for func in (tableA6, tableA7):
         with pytest.warns(FigureNotApplicable):
-            assert func(sim_dir, mu=0.005) is None
+            assert func(sim_dir, mu=0.05) is None
 
 
 def test_a_failed_fit_leaves_out_its_row(sim_dir, monkeypatch):
