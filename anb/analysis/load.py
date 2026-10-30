@@ -108,7 +108,7 @@ class Loader:
         if t is not None:
             frame = frame[frame.t.isin(t)]
         # One block per dtype: thousands of held frames of ~90 one-column blocks each fragment the heap (measured:
-        # `make_all` on simOut_old_model peaks at 2.4 instead of 3.8 GB, and runs faster).
+        # `make_all` on simOut_old_model peaks at a median 2.7 instead of 3.6 GB, and runs faster).
         return Run(path, frame.reset_index(drop=True).copy(), layout)
 
 

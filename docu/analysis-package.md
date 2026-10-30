@@ -147,7 +147,7 @@ Tables 3 and A5 are row fragments (no `tabular` environment), as the old output 
 ## `make_all` and the CLI
 
 ```python
-make_all(sim_dir, out_dir, *, base=Baseline(), formats=("png",), figs=None, tables=True, mus=(0.0, 0.005, 0.05),
+make_all(sim_dir, out_dir, *, base=PAPER, formats=("png",), figs=None, tables=True, mus=(0.0, 0.005, 0.05),
          min_seeds=1, strict=False, loader=None, index=None) -> dict[str, list[Path] | str]
 ```
 
@@ -156,8 +156,8 @@ It indexes `sim_dir` once and attempts, for `base`, in this order:
 - `fig2` for the adaptive, static-low and static-high configs (Fig. 2, A1, A2), `fig3`, `figA3`;
 - `fig4`, `fig5` and `figA4` for each μ in `mus`;
 - `fig6`, `figA7`, `figA8`;
-- with `tables`: for each μ in `mus`, `table3` for each s > 0 that has at least `min_seeds` runs of the base at that
-  μ, then `tableA5`, `tableA6`, `tableA7`.
+- with `tables`: for each μ in `mus`, `table3` for each s > 0 that has runs of the base at that μ (one with fewer
+  than `min_seeds` is skipped, with that reason), then `tableA5`, `tableA6`, `tableA7`.
 
 Each item gets the defaults of its function (plus `min_seeds` where it takes one). Figures are saved in `formats`
 (then closed), tables to `out_dir/tables/`. The report maps each item's **key** to what happened:
@@ -176,7 +176,8 @@ item, paths relative to `out_dir`); `format_report(report, out_dir=None)` gives 
 All items share one `Loader(whole=True)`: the first request of a CSV reads all its columns (ensemble runs at the
 rows the figures use, t = 95.5 / 100 / 145.5 / 195.5; detailed runs whole), and later requests are cut from it, so
 each CSV is read from disk once (`loader.reads` counts the reads per path). On `simOut_old_model` that's 4107 of
-its 8412 CSVs, held at once: the run takes about 50 s and peaks at about 1.9 GB. `make_all(..., loader=Loader())`
+its 8412 CSVs, held at once: the run takes about 50 s and peaks at about 2.7 GB (the median of seven runs; the peak
+varies from 2.1 to 3.9 GB between runs). `make_all(..., loader=Loader())`
 holds only the rows and columns asked for (about 0.9 GB at the peak) but reads about 700 CSVs twice, when a later
 figure asks for more of them, in about the same time. Pass your own `loader=` / `index=` to share them with other
 calls. `tests/test_old_vs_new_make_all.py` (slow) runs it on `simOut_old_model` and checks that every paper figure and
