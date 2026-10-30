@@ -13,8 +13,8 @@
 
 **Blocked by:** #06
 
-**Status:** open
+**Status:** done
 
-- [ ] Each function returns a string, and nothing is printed or written until `save_table`
-- [ ] Slow: the LaTeX matches the old script's stdout for μ = 0 (whitespace-insensitive), and any intended difference is documented
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] Each function returns a string, and nothing is printed or written until `save_table`
+- [x] Slow: the LaTeX matches the old script's stdout for μ = 0 (whitespace-insensitive), and any intended difference is documented
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass

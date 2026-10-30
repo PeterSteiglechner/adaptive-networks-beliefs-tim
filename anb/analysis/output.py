@@ -1,4 +1,4 @@
-"""What a figure function returns, and the explicit step that saves it."""
+"""What a figure or table function returns, and the explicit steps that save them."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,3 +32,32 @@ class FigureResult:
             self.figure.savefig(path, **({"dpi": PNG_DPI} if fmt == "png" else {}))
             paths.append(path)
         return paths
+
+
+TABLES_DIR = "tables"
+
+
+class LatexTable(str):
+    """What a table function returns: its LaTeX (a plain `str` otherwise), carrying the file stem `name`."""
+
+    name: str
+
+    def __new__(cls, latex: str, name: str):
+        table = super().__new__(cls, latex)
+        table.name = name
+        return table
+
+
+def save_table(latex: str, out_dir, name: str | None = None) -> Path:
+    """Write `latex` to `out_dir/tables/<name>.tex`, creating the folder; the path.
+
+    `name` defaults to the table's own (`LatexTable.name`); a plain string needs one.
+    """
+    name = getattr(latex, "name", None) if name is None else name
+    if not name:
+        raise ValueError("save_table needs a name for a plain string")
+    folder = Path(out_dir) / TABLES_DIR
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{name}.tex"
+    path.write_text(f"{latex}\n")
+    return path

@@ -3,7 +3,8 @@
 > **Status: in progress.** This describes the design agreed in `.scratch/analysis-refactor/spec.md`. Implemented
 > so far: `index_folder`, the core (`Baseline`, selection, warnings, `Loader`, `FigureResult`, style) and `fig2`
 > with `example_agent_stats` / `focal_sign_counts`, `fig3` / `figA3` / `polarisation_summary`, and `fig4` / `fig5` /
-> `figA4` with their shared `metric_frame` (and `cohens_d` / `logit_fit` for Fig. 4). Update it as the tickets
+> `figA4` with their shared `metric_frame` (and `cohens_d` / `logit_fit` for Fig. 4), and the tables `table3` /
+> `tableA5` / `tableA6` / `tableA7` with `save_table` and `greedy_uncorrelated_subset`. Update it as the tickets
 > land. The old `analyse_*.py` scripts ([analysis.md](analysis.md)) stay unchanged as the reference.
 
 `anb.analysis` makes the paper's figures and tables from **whatever runs a folder holds**. It finds runs by
@@ -95,9 +96,10 @@ seeded random agent of that type, with an `ExampleAgentFallback` warning (also a
 | `fig6` | ensemble adaptive, s = 4, at least two μ values, plus the example μ values for A/B | 100 | `mus=None` (all present), `example_seed=1`, `example_mus=(0.005, 0.2)`, `agent_rng_seed=42` |
 | `figA7` | ensemble adaptive, s = 4, each listed μ for `seed` | 1 | `seed=99`, `s=4`, `mus=(0, 0.005, 0.2)` |
 | `figA8` | ensemble s = 4: the base, plus each OFAT row (`M, N, beta, p, tau, eps, init_w`) for its configs | 100 | `rows=None` (all) |
-| `table3` (Table 3, A1–A4) | ensemble adaptive at `mu` and `s` | 100 | `s`, `mu=0.0` |
-| `tableA5` | ensemble adaptive: s = 4 and s = 0 | 100 | `mu=0.0` |
-| `tableA6`, `tableA7` | as `fig4` | 100 | `mu=0.0` |
+| `table3` (Table 3, A1–A4) | ensemble at `mu` (replacing the base's μ) and `s` | 100 | `s` (required, > 0), `mu=0.0`, `seeds=None` |
+| `tableA5` | ensemble at `mu` (replacing the base's μ): s = 4 and the s = 0 reference | 100 | `mu=0.0`, `seeds=None` |
+| `tableA6`, `tableA7` | as `fig4`; `tableA7` only at the pressures in `contrast2_pressures` | 100 | `mu=0.0`, `pressures=None` (paper rule), `seeds=None`; `tableA7` also `contrast2_pressures=(1, 2, 4)` |
+| `greedy_uncorrelated_subset` | as `figA4` | 100 | `mu=0.0`, `metrics` (the old nine candidates), `n=None` (all), `seeds=None` |
 
 In `make_all`, `fig2` is attempted for the adaptive, static-low and static-high configs (A1, A2). The `fig4` /
 `figA4` / `table*` family is attempted for each μ in `mus=(0.0, 0.005, 0.05)`, and `table3` for each s > 0 that
@@ -121,7 +123,22 @@ Names are the old scripts' names (`fig2_adaptive_t100`, `fig3_responseFrequencie
 baseline appends the differing fields as legacy tokens (`_link_prob0.20`, `_M15.00`), so variants don't
 overwrite the paper figures. `fig5` at an `s` other than 4 appends `_s{s}`.
 
-A table function returns its LaTeX string. `save_table(latex, out_dir)` writes it to `out_dir/tables/<name>.tex`.
+A table function returns its LaTeX as a `LatexTable`, a `str` that also carries the file stem in `.name`, and
+prints nothing. `save_table(latex, out_dir, name=None)` writes it to `out_dir/tables/<name>.tex` (creating the
+folder) and returns the path; `name` defaults to the table's own, and a plain string needs one. The names are
+`table3_s{s}`, `tableA5_metricChange`, `tableA6_logit_rRC` and `tableA7_logit_Rr`, each plus `_mu{mu}` for μ > 0
+and the base suffix (as for Fig. A4). The content and layout are the old script's stdout:
+
+- `table3`: a comment block (window, `s_ext`), the column header, one row of mean ± sd per metric (one decimal for
+  |mean| > 10, two otherwise) for compliant, resilient and resistant agents in the before window, and the
+  proportions of the three types among them. A type without agents gets blank cells and 0.0 %.
+- `tableA5`: per metric the three types at the three windows, then the s = 0 reference (every agent) at the three
+  windows, and the proportions. The column header is a LaTeX comment, as before.
+- `tableA6` / `tableA7`: a full `table` environment with one row per pressure: N, the proportions of group 1 /
+  group 0, McFadden and Tjur R², and the LR χ² and p (`<0.001` below 0.001) of `logit_fit`. A fit that fails warns
+  (`FitWarning`) and its row is left out.
+
+Tables 3 and A5 are row fragments (no `tabular` environment), as the old output was.
 
 `make_all` returns `{item: [paths] | "skipped: <reason>" | "error: <message>"}` and prints a summary. An
 unexpected error in one item is warned about with its traceback and the run carries on. With `strict=True` it
@@ -145,7 +162,10 @@ These functions return DataFrames:
   uses one degree of freedom per predictor kept, and without `x_focal` the control model is intercept-only;
 - `metric_frame(runs, loader)`: the old `res` of `analyse_BNmetrics.py` for some index rows, one row per
   run × window × agent with the agent's response (from the 95.5 row) and `Hpersnonfoc`;
-- `greedy_uncorrelated_subset`.
+- `greedy_uncorrelated_subset`: the old script's greedy search for weakly correlated metrics on the Fig. A4
+  correlations (same runs). It starts with the metric of the lowest mean |r| to all candidates and then adds the
+  one whose largest |r| to those already picked is smallest. Columns are `rank`, `metric`, `mean_abs_r`,
+  `max_abs_r` (to the earlier picks, NaN for the first) and `predictor` (one of the five hand-chosen predictors).
 
 ## Differences from the old scripts
 
@@ -156,6 +176,9 @@ These are the real bugs, and they are fixed:
 - **`fixedBNat100` filename typos:** gone, because runs are found through the index.
 - **`figs/` creation order:** `save` creates `out_dir` first.
 - **`nr_negs`:** it uses the before-window row (95.5), not the t = 100 snapshot.
+- **Table A5 column order:** the s = 0 reference columns come after the three resistant ones, as in the paper. The
+  old print cell interleaved them with the resistant columns (resistant before, reference before, resistant
+  during, …). When a response type is absent, its proportion cell keeps its three columns (the old cell wrote one).
 
 Everything else matches. The defaults reproduce the paper's choices: example agents, example seeds, the Fig. A3
 draws (a local `RandomState(14)` instead of the global seed) and the response-frequency denominators (Fig. 3
@@ -183,6 +206,8 @@ RGB values differ by more than 0.05.
 | Fig. 5 | `analyse_BNmetrics.py` | mean, sd and n per metric × response × window (100 seeds): rtol 1e-12 | 0.1 % |
 | Fig. A4 | `analyse_BNmetrics.py` | correlation matrix (s = 0, three windows pooled): rtol 1e-12 | reported only (0.47 %, the title) |
 | Fig. 4 | `analyse_BNmetrics.py` | Cohen's d (rtol 1e-10), logit coefficients and CIs of the five predictors (rtol 1e-6), per contrast × s | 0.1 % (0 %) |
+| Tables 3, A1–A7 | `analyse_BNmetrics.py` | the LaTeX against the script's captured stdout, whitespace ignored: identical (Table A5 after moving the old reference columns last) | — |
+| `greedy_uncorrelated_subset` | `analyse_BNmetrics.py` | the order (`chosen`): same | — |
 
 Fig. 3's strip plots jitter with the global NumPy RNG (seaborn has no RNG argument). The old script leaves it
 unseeded, and the package seeds it per figure and restores it afterwards, so a figure is the same on every run.
