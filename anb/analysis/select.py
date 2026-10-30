@@ -20,6 +20,10 @@ class MissingLevelsWarning(UserWarning):
     """Some of the paper's levels (pressures, μ values) inside a panel have no runs; the figure uses the others."""
 
 
+class FitWarning(UserWarning):
+    """A model fit inside a figure failed (empty group, no convergence): that estimate is left out, the rest drawn."""
+
+
 class ExampleAgentFallback(UserWarning):
     """A default example agent doesn't exist in the run (or has the wrong type) and a seeded random one is used."""
 

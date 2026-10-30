@@ -11,8 +11,8 @@
 
 **Blocked by:** #05
 
-**Status:** open
+**Status:** done
 
-- [ ] On the fixture: renders with the available pressures, and a missing μ gives `FigureNotApplicable`
-- [ ] Slow: Cohen's d and the logit coefficients/CIs match the old script for μ = 0 within a tolerance
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] On the fixture: renders with the available pressures, and a missing μ gives `FigureNotApplicable`
+- [x] Slow: Cohen's d and the logit coefficients/CIs match the old script for μ = 0 within a tolerance
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass

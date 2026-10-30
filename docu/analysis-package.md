@@ -2,9 +2,9 @@
 
 > **Status: in progress.** This describes the design agreed in `.scratch/analysis-refactor/spec.md`. Implemented
 > so far: `index_folder`, the core (`Baseline`, selection, warnings, `Loader`, `FigureResult`, style) and `fig2`
-> with `example_agent_stats` / `focal_sign_counts`, `fig3` / `figA3` / `polarisation_summary`, and `fig5` / `figA4`
-> with their shared `metric_frame`. Update it as the tickets land. The old `analyse_*.py`
-> scripts ([analysis.md](analysis.md)) stay unchanged as the reference.
+> with `example_agent_stats` / `focal_sign_counts`, `fig3` / `figA3` / `polarisation_summary`, and `fig4` / `fig5` /
+> `figA4` with their shared `metric_frame` (and `cohens_d` / `logit_fit` for Fig. 4). Update it as the tickets
+> land. The old `analyse_*.py` scripts ([analysis.md](analysis.md)) stay unchanged as the reference.
 
 `anb.analysis` makes the paper's figures and tables from **whatever runs a folder holds**. It finds runs by
 parameter, not by a hard-coded filename. Each figure and table is its own function, and `make_all` runs all of
@@ -77,6 +77,9 @@ The package writes the `_M{M:.2f}`, `_N{N:.2f}` and `_tau{tau:.2f}` suffixes onl
   **`MissingLevelsWarning`** (a `UserWarning`), and if none exist, the figure is not applicable. For Fig. 3 and
   the polarisation summary a level counts only if all four configs have it.
 
+A model fit inside a figure that fails (an empty group, a perfect separation, no convergence) gives a **`FitWarning`**
+(a `UserWarning`), and only that estimate is left out (Fig. 4's dots for one contrast × s).
+
 Default example agents that are missing, or that don't have the intended response type, are replaced by a
 seeded random agent of that type, with an `ExampleAgentFallback` warning (also a `UserWarning`).
 
@@ -86,7 +89,7 @@ seeded random agent of that type, with an `ExampleAgentFallback` warning (also a
 | `fig3` | ensemble: all 4 configs × s > 0 levels, plus a detailed adaptive run for panel A | 100 (old script: 20) | `seeds=None`, `example_seed=1`, `example_s=4`, `example_agents={resistant: 4, resilient: 53, compliant: 16}`, `denominator` (the four types incl. `latecompliant`) |
 | `polarisation_summary` | ensemble: all 4 configs × s ≥ 0 levels | 100 (old script: 20) | `seeds=None` |
 | `figA3` | detailed adaptive run for each s ∈ {0, 1, 2, 4, 8, 16} | 1 | `seed=1`, `rng_seed=14` |
-| `fig4` (Fig. 4, A5, A6) | ensemble adaptive at `mu`: s > 0 levels for μ = 0, s = 4 for μ > 0 | 100 | `mu=0.0`, `contrast2_pressures=(1, 2, 4)` |
+| `fig4` (Fig. 4, A5, A6) | ensemble at `mu` (replacing the base's μ): s ∈ {1, 2, 4, 8, 16} for μ = 0, s = 4 for μ > 0 | 100 | `mu=0.0`, `pressures=None` (paper rule), `contrast2_pressures=(1, 2, 4)`, `seeds=None` |
 | `fig5` | ensemble at `mu` (replacing the base's μ): `s` and the s = 0 reference | 100 | `mu=0.0`, `s=4`, `seeds=None` |
 | `figA4` | ensemble at `mu` (replacing the base's μ): s = 0 (μ = 0) or s = 4 (μ > 0) | 100 | `mu=0.0`, `seeds=None` |
 | `fig6` | ensemble adaptive, s = 4, at least two μ values, plus the example μ values for A/B | 100 | `mus=None` (all present), `example_seed=1`, `example_mus=(0.005, 0.2)`, `agent_rng_seed=42` |
@@ -133,6 +136,13 @@ These functions return DataFrames:
   `groupishness` and `nr_negs`. Columns are `(metric, "mean" | "std")` plus `("n_runs", "")`;
 - `example_agent_stats`: the `tb_tot`, `tb_foc` and `Hpers` of the Fig. 2 agents at t = 100;
 - `focal_sign_counts`;
+- `cohens_d(before, contrast)` and `logit_fit(before, contrast)`: Fig. 4's statistics on one window and pressure
+  of `metric_frame` rows, for the contrasts `"rR-C"` (resistant + resilient vs compliant) and `"R-r"` (resistant vs
+  resilient). Cohen's d leaves `latecompliant` out, the logit counts it as compliant (as the old script). The logit
+  standardises `n_nbs, tb_foc, absOm_foc, clust, bc_foc` and the control `x_focal` within the subset and returns a
+  `LogitFit` (coefficients with 95 % CIs, McFadden and Tjur R², the LR test against the control model, the group
+  sizes), or `None` with a `FitWarning`. Where the old script crashes (a near-constant column dropped), the LR test
+  uses one degree of freedom per predictor kept, and without `x_focal` the control model is intercept-only;
 - `metric_frame(runs, loader)`: the old `res` of `analyse_BNmetrics.py` for some index rows, one row per
   run × window × agent with the agent's response (from the 95.5 row) and `Hpersnonfoc`;
 - `greedy_uncorrelated_subset`.
@@ -172,6 +182,7 @@ RGB values differ by more than 0.05.
 | `polarisation_summary` | `analyse_responseFrequencies.py` | σ_foc, groupishness (mean, std), mean \|ω\|, mean ω: rtol 1e-12; `nr_negs` differs on purpose | — |
 | Fig. 5 | `analyse_BNmetrics.py` | mean, sd and n per metric × response × window (100 seeds): rtol 1e-12 | 0.1 % |
 | Fig. A4 | `analyse_BNmetrics.py` | correlation matrix (s = 0, three windows pooled): rtol 1e-12 | reported only (0.47 %, the title) |
+| Fig. 4 | `analyse_BNmetrics.py` | Cohen's d (rtol 1e-10), logit coefficients and CIs of the five predictors (rtol 1e-6), per contrast × s | 0.1 % (0 %) |
 
 Fig. 3's strip plots jitter with the global NumPy RNG (seaborn has no RNG argument). The old script leaves it
 unseeded, and the package seeds it per figure and restores it afterwards, so a figure is the same on every run.

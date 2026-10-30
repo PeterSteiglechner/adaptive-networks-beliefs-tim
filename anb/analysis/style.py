@@ -78,6 +78,15 @@ METRIC_LABELS = {
     "Hsoc": "dissonance focal social",
 }
 
+# Pressure levels s (`analyse_BNmetrics.py`'s `cmapS`, Fig. 4).
+PRESSURE_COLORS = {
+    1: (0.0000, 0.4470, 0.7410),
+    2: (0.8500, 0.3250, 0.0980),
+    4: (0.9290, 0.6940, 0.1250),
+    8: (0.4940, 0.1840, 0.5560),
+    16: (0.4660, 0.6740, 0.1880),
+}
+
 EXAMPLE_AGENT_COLORS = ("#27ae60", "#9b59b6")  # Fig. 2's two highlighted agents
 PRESSURE_WINDOW = (101, 150)
 FOCAL = 0
