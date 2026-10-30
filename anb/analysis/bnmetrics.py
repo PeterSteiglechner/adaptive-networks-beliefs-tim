@@ -4,7 +4,8 @@ pressure.
 Reproduces `analyse_BNmetrics.py`. Its `res` (one row per agent × seed × s × window, labelled with the agent's
 response) is `metric_frame`; the runs come from the index instead of the script's fixed seed and pressure lists. The
 Fig. A4 title states the three windows it pools (the old title named only the first). Fig. 4's Cohen's d and logit
-fits are the plain functions `cohens_d` and `logit_fit`, which the tables reuse.
+fits are the plain functions `cohens_d` and `logit_fit`, which the tables (`tables.py`) reuse. The old script's
+`greedy_uncorrelated_subset` works on Fig. A4's correlations.
 """
 
 import string
@@ -47,6 +48,8 @@ PREDICTORS = ("n_nbs", "tb_foc", "absOm_foc", "clust", "bc_foc")  # the old `dep
 CONTROL = ("x_focal",)
 FIG4_PRESSURES = (1, 2, 4, 8, 16)  # the paper's levels for μ = 0; for μ > 0 only `PAPER_S`
 CONTRAST2_PRESSURES = (1, 2, 4)  # the second contrast has too few resistant agents above s = 4
+# The metrics the greedy search of `greedy_uncorrelated_subset` chooses from (the old `metrics_considered`).
+GREEDY_CANDIDATES = ("x_focal", "n_nbs", "tb_tot", "tb_foc", "absOm_tot", "absOm_foc", "clust", "bc_foc", "extr_nonfoc")
 
 # The CSV metric columns `res` keeps; `Hpers` is replaced by `Hpersnonfoc` = `Hpers` − `Hpersfoc`.
 _RAW = ("n_nbs", "Hpers", "Hpersfoc", "Hsoc", "Hext", "tb_tot", "tb_foc", "absOm_tot", "absOm_foc", "clust", "bc_foc",
@@ -172,18 +175,52 @@ def figA4(sim_dir, *, base: Baseline = PAPER, mu=0.0, seeds=None, min_seeds=1, l
 
     `data`: metric, other, r (the full symmetric matrix; the figure shows the part below the diagonal).
     """
-    s = 0 if mu == 0 else PAPER_S
     index = index_folder(sim_dir) if index is None else index
-    frame = _selected_metric_frame(index, base, mu, (s,), item="figA4", seeds=seeds, min_seeds=min_seeds, loader=loader)
-    if frame is None:
+    corr = _correlations(index, base, mu, item="figA4", seeds=seeds, min_seeds=min_seeds, loader=loader)
+    if corr is None:
         return None
-    corr = frame[list(METRICS)].corr()
     with figure_style(SCRIPT_RC):
         fig = _draw_figA4(corr)
     data = corr.rename_axis(index="metric", columns=None).reset_index().melt(id_vars="metric", var_name="other",
                                                                              value_name="r")
     name = "AppendixFig_metricCorrelations" + (f"_mu{float(mu)}" if mu > 0 else "") + base.suffix(ignore=("mu",))
     return FigureResult(fig, data, name)
+
+
+def _correlations(index, base: Baseline, mu, *, item, seeds, min_seeds, loader) -> pd.DataFrame | None:
+    """Fig. A4's correlation matrix of `METRICS` (s = 0 for μ = 0, s = 4 for μ > 0, three windows pooled), or `None`."""
+    s = 0 if mu == 0 else PAPER_S
+    frame = _selected_metric_frame(index, base, mu, (s,), item=item, seeds=seeds, min_seeds=min_seeds, loader=loader)
+    return None if frame is None else frame[list(METRICS)].corr()
+
+
+def greedy_uncorrelated_subset(sim_dir, *, base: Baseline = PAPER, mu=0.0, metrics=GREEDY_CANDIDATES, n=None,
+                               seeds=None, min_seeds=1, loader=None, index=None) -> pd.DataFrame | None:
+    """The order in which a greedy search picks weakly correlated `metrics`, on Fig. A4's correlations.
+
+    The old script's helper, which backs the paper's choice of `PREDICTORS`: it starts with the metric of the lowest
+    mean |r| to all of `metrics` (itself included), then adds the one whose largest |r| to those already picked is
+    smallest, until it has `n` (default: all). Ties go to the earlier of `metrics`. Same runs as `figA4`.
+
+    Columns: rank (1…n), metric, mean_abs_r (to all of `metrics`), max_abs_r (to the earlier picks, NaN for the
+    first) and predictor (one of the hand-chosen `PREDICTORS`).
+    """
+    metrics = list(metrics)
+    n = len(metrics) if n is None else n
+    index = index_folder(sim_dir) if index is None else index
+    corr = _correlations(index, base, mu, item="greedy_uncorrelated_subset", seeds=seeds, min_seeds=min_seeds,
+                         loader=loader)
+    if corr is None:
+        return None
+    abs_corr = corr.loc[metrics, metrics].abs()
+    mean_abs = abs_corr.mean()
+    picked, max_abs = [mean_abs.idxmin()], [np.nan]
+    while len(picked) < n:
+        to_picked = abs_corr.loc[[m for m in metrics if m not in picked], picked].max(axis=1)
+        picked.append(to_picked.idxmin())
+        max_abs.append(to_picked.min())
+    return pd.DataFrame({"rank": range(1, n + 1), "metric": picked, "mean_abs_r": mean_abs[picked].to_numpy(),
+                         "max_abs_r": max_abs, "predictor": [m in PREDICTORS for m in picked]})
 
 
 def _draw_figA4(corr: pd.DataFrame):
