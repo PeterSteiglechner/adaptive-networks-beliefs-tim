@@ -35,6 +35,17 @@ def figure_style(rc=RC):
         yield
 
 
+@contextmanager
+def seeded_jitter(seed):
+    """NumPy's global RNG seeded with `seed` (seaborn's strip-plot jitter draws from it) and restored afterwards."""
+    state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        yield
+    finally:
+        np.random.set_state(state)
+
+
 # BN configs: the file-name token (also the figure-name part) → the label in titles and legends.
 CONFIG_LABELS = {
     "staticlow": r"static ($\omega_0=0.2$)",

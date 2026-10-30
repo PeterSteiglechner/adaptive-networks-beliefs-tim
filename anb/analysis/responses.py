@@ -5,7 +5,6 @@ folder. The old script's implicit choices are keyword arguments: Fig. 3A's run (
 Fig. A3's agent draws (the global NumPy seed there, a local `RandomState` here).
 """
 
-import contextlib
 import string
 import warnings
 
@@ -21,7 +20,7 @@ from .load import Loader, Run
 from .output import FigureResult
 from .select import (CONFIG_FIELDS, CONFIGS, PAPER, Baseline, Cell, ExampleAgentFallback, FigureNotApplicable,
                      MissingLevelsWarning, runs, select)
-from .style import CONFIG_LABELS, FOCAL, RESPONSE_COLORS, SCRIPT_RC, figure_style, pressure_alpha
+from .style import CONFIG_LABELS, FOCAL, RESPONSE_COLORS, SCRIPT_RC, figure_style, pressure_alpha, seeded_jitter
 
 RESPONSES = ("compliant", "resilient", "resistant", "latecompliant")  # Fig. 3's denominator includes latecompliant
 PLOTTED = ("compliant", "resilient", "resistant")
@@ -97,16 +96,6 @@ def _frequencies(table: pd.DataFrame, denominator) -> pd.DataFrame:
     return long.sort_values(["config", "s", "seed"], kind="stable", ignore_index=True)
 
 
-@contextlib.contextmanager
-def _seeded_jitter(seed):
-    state = np.random.get_state()
-    np.random.seed(seed)
-    try:
-        yield
-    finally:
-        np.random.set_state(state)
-
-
 def fig3(sim_dir, *, base: Baseline = PAPER, seeds=None, example_seed=1, example_s=4,
          example_agents=None, denominator=RESPONSES, min_seeds=1, loader=None,
          index=None) -> FigureResult | None:
@@ -139,7 +128,7 @@ def fig3(sim_dir, *, base: Baseline = PAPER, seeds=None, example_seed=1, example
     run = loader.load(path, columns=_DETAILED_COLUMNS)
     agents = _example_agents(run, example_agents)
     data = _frequencies(_per_run(grid, base, loader), denominator)
-    with figure_style(SCRIPT_RC), _seeded_jitter(JITTER_SEED):
+    with figure_style(SCRIPT_RC), seeded_jitter(JITTER_SEED):
         fig = _draw_fig3(data, run, agents, int(example[cell.label].s.iloc[0]))
     return FigureResult(fig, data, "fig3_responseFrequencies" + base.suffix(ignore=CONFIG_FIELDS))
 

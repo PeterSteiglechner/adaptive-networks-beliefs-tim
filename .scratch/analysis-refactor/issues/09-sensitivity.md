@@ -18,7 +18,7 @@
 - [x] Slow (if sensitivity runs exist in `simOut_old_model`): the frequencies match the old script, otherwise skipped with a reason
 - [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
 
-Notes: `figA8(sim_dir, *, base, rows=None, seeds=None, min_seeds=1, loader=None, index=None)` in
+Notes: `figA8(sim_dir, *, base=PAPER, rows=None, seeds=None, min_seeds=1, loader=None, index=None)` in
 `anb/analysis/sensitivity.py`. A row with a variant missing gives a `MissingLevelsWarning` (no new warning class), the
 base cells of the configs the rows use are required. Each row's middle value is the base's runs drawn once (the old
 script doubled the ε = 1 / ω₀ = 0.2 dots). `simOut_old_model` has no sensitivity runs, so the comparison on it skips
