@@ -10,9 +10,9 @@
 
 **Blocked by:** #03
 
-**Status:** open
+**Status:** done
 
-- [ ] On the fixture: a missing example μ gives `FigureNotApplicable`, and an M/N variant base renders
-- [ ] Fig. 6D tick labels equal the tick positions as percentages
-- [ ] Slow: H, the z-scores and the frequencies match the old script on `simOut_old_model`
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] On the fixture: a missing example μ gives `FigureNotApplicable`, and an M/N variant base renders
+- [x] Fig. 6D tick labels equal the tick positions as percentages
+- [x] Slow: H, the z-scores and the frequencies match the old script on `simOut_old_model`
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass

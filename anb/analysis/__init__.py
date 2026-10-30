@@ -10,13 +10,14 @@ from .output import FigureResult, LatexTable, save_table
 from .responses import fig3, figA3, polarisation_summary
 from .select import (CONFIGS, PAPER, Baseline, Cell, ExampleAgentFallback, FewSeedsWarning, FigureNotApplicable,
                      FitWarning, MissingLevelsWarning, runs, select)
+from .social import fig6, figA7
 from .tables import table3, tableA5, tableA6, tableA7
 from .timeseries import example_agent_stats, fig2, focal_sign_counts
 
 __all__ = [
     "CONFIGS", "PAPER", "Baseline", "Cell", "ExampleAgentFallback", "FewSeedsWarning", "FigureNotApplicable",
     "FigureResult", "FitWarning", "LatexTable", "Layout", "Loader", "LogitFit", "MissingLevelsWarning", "Run",
-    "cohens_d", "example_agent_stats", "fig2", "fig3", "fig4", "fig5", "figA3", "figA4", "focal_sign_counts",
-    "greedy_uncorrelated_subset", "index_folder", "logit_fit", "metric_frame", "polarisation_summary", "runs",
-    "save_table", "select", "table3", "tableA5", "tableA6", "tableA7",
+    "cohens_d", "example_agent_stats", "fig2", "fig3", "fig4", "fig5", "fig6", "figA3", "figA4", "figA7",
+    "focal_sign_counts", "greedy_uncorrelated_subset", "index_folder", "logit_fit", "metric_frame",
+    "polarisation_summary", "runs", "save_table", "select", "table3", "tableA5", "tableA6", "tableA7",
 ]

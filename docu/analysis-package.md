@@ -3,9 +3,9 @@
 > **Status: in progress.** This describes the design agreed in `.scratch/analysis-refactor/spec.md`. Implemented
 > so far: `index_folder`, the core (`Baseline`, selection, warnings, `Loader`, `FigureResult`, style) and `fig2`
 > with `example_agent_stats` / `focal_sign_counts`, `fig3` / `figA3` / `polarisation_summary`, and `fig4` / `fig5` /
-> `figA4` with their shared `metric_frame` (and `cohens_d` / `logit_fit` for Fig. 4), and the tables `table3` /
-> `tableA5` / `tableA6` / `tableA7` with `save_table` and `greedy_uncorrelated_subset`. Update it as the tickets
-> land. The old `analyse_*.py` scripts ([analysis.md](analysis.md)) stay unchanged as the reference.
+> `figA4` with their shared `metric_frame` (and `cohens_d` / `logit_fit` for Fig. 4), the tables `table3` /
+> `tableA5` / `tableA6` / `tableA7` with `save_table` and `greedy_uncorrelated_subset`, and `fig6` / `figA7`.
+> Update it as the tickets land. The old `analyse_*.py` scripts ([analysis.md](analysis.md)) stay unchanged as the reference.
 
 `anb.analysis` makes the paper's figures and tables from **whatever runs a folder holds**. It finds runs by
 parameter, not by a hard-coded filename. Each figure and table is its own function, and `make_all` runs all of
@@ -93,8 +93,8 @@ seeded random agent of that type, with an `ExampleAgentFallback` warning (also a
 | `fig4` (Fig. 4, A5, A6) | ensemble at `mu` (replacing the base's μ): s ∈ {1, 2, 4, 8, 16} for μ = 0, s = 4 for μ > 0 | 100 | `mu=0.0`, `pressures=None` (paper rule), `contrast2_pressures=(1, 2, 4)`, `seeds=None` |
 | `fig5` | ensemble at `mu` (replacing the base's μ): `s` and the s = 0 reference | 100 | `mu=0.0`, `s=4`, `seeds=None` |
 | `figA4` | ensemble at `mu` (replacing the base's μ): s = 0 (μ = 0) or s = 4 (μ > 0) | 100 | `mu=0.0`, `seeds=None` |
-| `fig6` | ensemble adaptive, s = 4, at least two μ values, plus the example μ values for A/B | 100 | `mus=None` (all present), `example_seed=1`, `example_mus=(0.005, 0.2)`, `agent_rng_seed=42` |
-| `figA7` | ensemble adaptive, s = 4, each listed μ for `seed` | 1 | `seed=99`, `s=4`, `mus=(0, 0.005, 0.2)` |
+| `fig6` | ensemble at each μ (replacing the base's μ), s = 4: at least two of `mus`, plus the run `example_seed` at both `example_mus` (which must be among `mus`) | 100 | `mus=None` (the paper's 11 that exist, missing ones warned about), `example_seed=1`, `example_mus=(0.005, 0.2)`, `agent_rng_seed=42`, `denominator` (compliant, resilient, resistant: no `latecompliant`), `seeds=None` |
+| `figA7` | ensemble at each μ (replacing the base's μ): the run `seed` at `s` for every listed μ | 1 | `seed=99`, `s=4`, `mus=(0, 0.005, 0.2)` |
 | `figA8` | ensemble s = 4: the base, plus each OFAT row (`M, N, beta, p, tau, eps, init_w`) for its configs | 100 | `rows=None` (all) |
 | `table3` (Table 3, A1–A4) | ensemble at `mu` (replacing the base's μ) and `s` | 100 | `s` (required, > 0), `mu=0.0`, `seeds=None` |
 | `tableA5` | ensemble at `mu` (replacing the base's μ): s = 4 and the s = 0 reference | 100 | `mu=0.0`, `seeds=None` |
@@ -181,8 +181,9 @@ These are the real bugs, and they are fixed:
   during, …). When a response type is absent, its proportion cell keeps its three columns (the old cell wrote one).
 
 Everything else matches. The defaults reproduce the paper's choices: example agents, example seeds, the Fig. A3
-draws (a local `RandomState(14)` instead of the global seed) and the response-frequency denominators (Fig. 3
-counts `latecompliant`, Fig. 6 doesn't).
+draws (a local `RandomState(14)` instead of the global seed), the Fig. 6A/B agents (`RandomState(42).randint(N)`
+instead of `randint(100)` on the global seed; the strip-plot jitter continues that RNG, as it did the global one) and
+the response-frequency denominators (Fig. 3 counts `latecompliant`, Fig. 6 doesn't).
 
 One deliberate change: figures use every seed they find, so Fig. 3 on a 100-seed folder uses 100 seeds instead
 of the old script's 20. Pass `seeds=range(20)` to reproduce the old Fig. 3.
@@ -208,6 +209,8 @@ RGB values differ by more than 0.05.
 | Fig. 4 | `analyse_BNmetrics.py` | Cohen's d (rtol 1e-10), logit coefficients and CIs of the five predictors (rtol 1e-6), per contrast × s | 0.1 % (0 %) |
 | Tables 3, A1–A7 | `analyse_BNmetrics.py` | the LaTeX against the script's captured stdout, whitespace ignored: identical (Table A5 after moving the old reference columns last) | — |
 | `greedy_uncorrelated_subset` | `analyse_BNmetrics.py` | the order (`chosen`): same | — |
+| Fig. 6 | `analyse_socialAdaptation.py` | H and its z-score, the z-scored metrics, the frequencies (11 μ × 100 seeds): rtol 1e-12 (z-scores 1e-10) | 0.1 % (0.05 %, the D tick labels) |
+| Fig. A7 | `analyse_socialAdaptation.py` | the PNG | 0.1 % (0 %) |
 
 Fig. 3's strip plots jitter with the global NumPy RNG (seaborn has no RNG argument). The old script leaves it
 unseeded, and the package seeds it per figure and restores it afterwards, so a figure is the same on every run.
