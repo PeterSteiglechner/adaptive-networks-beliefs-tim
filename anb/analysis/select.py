@@ -17,7 +17,8 @@ class FewSeedsWarning(UserWarning):
 
 
 class MissingLevelsWarning(UserWarning):
-    """Some of the paper's levels (pressures, μ values) inside a panel have no runs; the figure uses the others."""
+    """Some of the paper's levels (pressures, μ values) inside a panel, or Fig. A8's rows, have no runs; the figure
+    uses the others."""
 
 
 class FitWarning(UserWarning):
