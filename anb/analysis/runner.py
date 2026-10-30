@@ -1,5 +1,6 @@
 """`make_all`: every figure and table that a simulation folder's runs allow, and the report of what was made."""
 
+import sys
 import traceback
 import warnings
 from collections.abc import Callable
@@ -11,7 +12,7 @@ import matplotlib.pyplot as plt
 from .bnmetrics import fig4, fig5, figA4
 from .index import index_folder
 from .load import Loader
-from .output import FORMATS, FigureResult, save_table
+from .output import FigureResult, checked_formats, save_table
 from .responses import fig3, figA3
 from .select import PAPER, Baseline, FigureFailed, FigureNotApplicable, runs
 from .sensitivity import figA8
@@ -57,7 +58,10 @@ def _no_pressures(sim_dir, *, mu, **_):
 
 
 def _items(index, base: Baseline, mus, min_seeds: int) -> list[_Item]:
-    """Every item `make_all` attempts, in report order: the figures, then the tables (`table3` per s > 0 present)."""
+    """Every item `make_all` attempts, in report order: the figures, then the tables (`table3` per s > 0 present).
+
+    A level with fewer than `min_seeds` runs is still an item, so that `table3` itself reports it as skipped and why.
+    """
     few = dict(min_seeds=min_seeds)
     items = [*(_Item("fig2", fig2, dict(config=config)) for config in FIG2_CONFIGS),
              _Item("fig3", fig3, kwargs=few), _Item("figA3", figA3)]
@@ -67,8 +71,7 @@ def _items(index, base: Baseline, mus, min_seeds: int) -> list[_Item]:
     items += [_Item("fig6", fig6, kwargs=few), _Item("figA7", figA7), _Item("figA8", figA8, kwargs=few)]
     for mu in mus:
         mu = float(mu)
-        present = runs(index, replace(base, mu=mu)).s.value_counts()
-        levels = sorted(_level(s) for s, n in present.items() if s > 0 and n >= min_seeds)
+        levels = sorted({_level(s) for s in runs(index, replace(base, mu=mu)).s if s > 0})
         items += [_Item("table3", table3, dict(s=s, mu=mu), few) for s in levels] or \
             [_Item("table3", _no_pressures, dict(mu=mu))]
         items += [_Item(name, func, dict(mu=mu), few) for name, func in (("tableA5", tableA5), ("tableA6", tableA6),
@@ -103,10 +106,7 @@ def make_all(sim_dir, out_dir, *, base: Baseline = PAPER, formats=("png",), figs
     or `"error: <message>"`, and is printed as a summary. Warnings are still emitted. An unexpected error in one
     item is warned about with its traceback (`FigureFailed`) and the other items still run; `strict=True` raises it.
     """
-    formats = tuple(formats)
-    unknown = [f for f in formats if f not in FORMATS]
-    if unknown:
-        raise ValueError(f"unknown format(s) {', '.join(unknown)}; choose from {', '.join(FORMATS)}")
+    formats = checked_formats(formats)
     out_dir = Path(out_dir)
     index = index_folder(sim_dir) if index is None else index
     loader = Loader(whole=True) if loader is None else loader
@@ -155,10 +155,21 @@ def _save(result, out_dir: Path, formats) -> list[Path] | None:
 
 
 def _reemit(caught):
-    """Emit recorded warnings again, through the caller's filters (an item's repeats once, as by default)."""
+    """Emit recorded warnings again, through the caller's filters, as from the module that warned.
+
+    A record keeps only the file, so the module is the loaded one of that file: its name for the filters' `module=`,
+    its registry for the repeats, as for a direct call. Without one, the module is derived from the file name and an
+    item's repeats are emitted once, as by default.
+    """
+    if not caught:
+        return
+    modules = {getattr(module, "__file__", None): module for module in list(sys.modules.values())}
     registry = {}
     for w in caught:
-        warnings.warn_explicit(w.message, w.category, w.filename, w.lineno, registry=registry, source=w.source)
+        module = modules.get(w.filename)
+        where = dict(registry=registry) if module is None else \
+            dict(module=module.__name__, registry=vars(module).setdefault("__warningregistry__", {}))
+        warnings.warn_explicit(w.message, w.category, w.filename, w.lineno, source=w.source, **where)
 
 
 def format_report(report: dict, out_dir=None) -> str:
