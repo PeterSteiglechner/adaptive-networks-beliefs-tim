@@ -10,8 +10,8 @@ import warnings
 
 import pandas as pd
 
-from .bnmetrics import (BEFORE, CONTRAST2_PRESSURES, FIG4_PRESSURES, HALF_WINDOW, METRICS, NEGATIVE, PAPER_S, WINDOWS,
-                        _fig4_before, _selected_metric_frame, logit_fit)
+from .bnmetrics import (BEFORE, CONTRAST2_PRESSURES, HALF_WINDOW, METRICS, NEGATIVE, PAPER_S, WINDOWS, fig4_before,
+                        fig4_levels, logit_fit, mu_name, selected_metric_frame)
 from .index import index_folder
 from .output import LatexTable
 from .select import PAPER, Baseline, FigureNotApplicable
@@ -26,11 +26,6 @@ _FIT_CAPTIONS = {
            r"(Resistant vs.\ Resilient)",
 }
 _FIT_LABELS = {"rR-C": "tab:fit_rRC", "R-r": "tab:fit_Rr"}
-
-
-def _name(stem, base: Baseline, mu) -> str:
-    """`stem`, plus `_mu{mu}` for μ > 0 and the base suffix (μ left out of it), as for Fig. A4."""
-    return stem + (f"_mu{float(mu)}" if mu > 0 else "") + base.suffix(ignore=("mu",))
 
 
 def _cell(values: pd.Series) -> str:
@@ -61,8 +56,8 @@ def table3(sim_dir, *, s, base: Baseline = PAPER, mu=0.0, seeds=None, min_seeds=
     if s == 0:
         raise ValueError("table3 needs a pressure s > 0: there are no response types without one")
     index = index_folder(sim_dir) if index is None else index
-    frame = _selected_metric_frame(index, base, mu, (s,), item="table3", seeds=seeds, min_seeds=min_seeds,
-                                   loader=loader)
+    frame = selected_metric_frame(index, base, mu, (s,), item="table3", seeds=seeds, min_seeds=min_seeds,
+                                  loader=loader)
     if frame is None:
         return None
     before = frame[frame.t == BEFORE]
@@ -73,7 +68,7 @@ def table3(sim_dir, *, s, base: Baseline = PAPER, mu=0.0, seeds=None, min_seeds=
         lines.append(f"{METRIC_LABELS[metric]} &  " + "".join(f"{c} & " for c in cells) + "\\\\")
     shares = _shares(before) or [" "] * len(NEGATIVE)
     lines.append("proportion &  " + "".join(f"{c} & " for c in shares) + "\\\\")
-    return LatexTable("\n".join(lines), _name(f"table3_s{s:g}", base, mu))
+    return LatexTable("\n".join(lines), mu_name(f"table3_s{s:g}", base, mu))
 
 
 def tableA5(sim_dir, *, base: Baseline = PAPER, mu=0.0, seeds=None, min_seeds=1, loader=None,
@@ -86,8 +81,8 @@ def tableA5(sim_dir, *, base: Baseline = PAPER, mu=0.0, seeds=None, min_seeds=1,
     old output. The name is `tableA5_metricChange`, plus `_mu{mu}` for μ > 0 and the base suffix.
     """
     index = index_folder(sim_dir) if index is None else index
-    frame = _selected_metric_frame(index, base, mu, (PAPER_S, 0), item="tableA5", seeds=seeds, min_seeds=min_seeds,
-                                   loader=loader)
+    frame = selected_metric_frame(index, base, mu, (PAPER_S, 0), item="tableA5", seeds=seeds, min_seeds=min_seeds,
+                                  loader=loader)
     if frame is None:
         return None
     pressured, reference = frame[frame.s == PAPER_S], frame[frame.s == 0]
@@ -99,7 +94,7 @@ def tableA5(sim_dir, *, base: Baseline = PAPER, mu=0.0, seeds=None, min_seeds=1,
         lines.append(f"  {METRIC_LABELS[metric]} &  " + "".join(f"{c} & " for c in cells) + "\\\\")
     shares = _shares(pressured[pressured.t == BEFORE]) or [" "] * len(NEGATIVE)
     lines.append("proportion &   " + "".join(f"{c} & & &  " for c in shares) + "\\\\")
-    return LatexTable("\n".join(lines), _name("tableA5_metricChange", base, mu))
+    return LatexTable("\n".join(lines), mu_name("tableA5_metricChange", base, mu))
 
 
 def tableA6(sim_dir, *, base: Baseline = PAPER, mu=0.0, pressures=None, seeds=None, min_seeds=1, loader=None,
@@ -111,9 +106,10 @@ def tableA6(sim_dir, *, base: Baseline = PAPER, mu=0.0, pressures=None, seeds=No
     have runs, the missing ones warned about. A fit that fails warns (`FitWarning`) and its row is left out. The
     name is `tableA6_logit_rRC`, plus `_mu{mu}` for μ > 0 and the base suffix.
     """
-    levels = _fit_levels(pressures, mu)
-    return _fit_table("rR-C", levels, sim_dir, base=base, mu=mu, seeds=seeds, min_seeds=min_seeds, loader=loader,
-                      index=index, item="tableA6", stem="tableA6_logit_rRC")
+    index = index_folder(sim_dir) if index is None else index
+    selected = fig4_before(index, base, mu, fig4_levels(pressures, mu), item="tableA6", seeds=seeds,
+                           min_seeds=min_seeds, loader=loader)
+    return None if selected is None else _fit_table("rR-C", *selected, mu_name("tableA6_logit_rRC", base, mu))
 
 
 def tableA7(sim_dir, *, base: Baseline = PAPER, mu=0.0, pressures=None, contrast2_pressures=CONTRAST2_PRESSURES,
@@ -123,28 +119,18 @@ def tableA7(sim_dir, *, base: Baseline = PAPER, mu=0.0, pressures=None, contrast
     Uses only those of the pressures that are in `contrast2_pressures`, as Fig. 4's second panel does. The name is
     `tableA7_logit_Rr`, plus `_mu{mu}` for μ > 0 and the base suffix.
     """
-    levels = tuple(s for s in _fit_levels(pressures, mu) if s in contrast2_pressures)
+    levels = tuple(s for s in fig4_levels(pressures, mu) if s in contrast2_pressures)
     if not levels:
         warnings.warn("tableA7 not applicable: none of the pressures is in contrast2_pressures", FigureNotApplicable,
                       stacklevel=2)
         return None
-    return _fit_table("R-r", levels, sim_dir, base=base, mu=mu, seeds=seeds, min_seeds=min_seeds, loader=loader,
-                      index=index, item="tableA7", stem="tableA7_logit_Rr")
-
-
-def _fit_levels(pressures, mu) -> tuple:
-    """`pressures`, or Fig. 4's rule: `FIG4_PRESSURES` for μ = 0, s = 4 for μ > 0."""
-    return tuple(pressures) if pressures is not None else FIG4_PRESSURES if mu == 0 else (PAPER_S,)
-
-
-def _fit_table(contrast, levels, sim_dir, *, base, mu, seeds, min_seeds, loader, index, item,
-               stem) -> LatexTable | None:
     index = index_folder(sim_dir) if index is None else index
-    selected = _fig4_before(index, base, mu, levels, item=item, seeds=seeds, min_seeds=min_seeds,
-                            loader=loader)
-    if selected is None:
-        return None
-    before, present = selected
+    selected = fig4_before(index, base, mu, levels, item="tableA7", seeds=seeds, min_seeds=min_seeds, loader=loader)
+    return None if selected is None else _fit_table("R-r", *selected, mu_name("tableA7_logit_Rr", base, mu))
+
+
+def _fit_table(contrast, before: pd.DataFrame, present, name) -> LatexTable:
+    """The fit table of `contrast` on `before` (from `fig4_before`), a row per level of `present` whose fit works."""
     lines = ["\\begin{table}[ht]", "\\centering", f"\\caption{{{_FIT_CAPTIONS[contrast]}}}",
              f"\\label{{{_FIT_LABELS[contrast]}}}", "\\begin{tabular}{ccccccc}", "\\toprule",
              r"$s$ & $N$ & Proportions & McFadden $R^2$ & Tjur $R^2$ & LR $\chi^2$ & LR $p$ \\",
@@ -158,4 +144,4 @@ def _fit_table(contrast, levels, sim_dir, *, base, mu, seeds, min_seeds, loader,
         lines.append(f"  {s:g} & {fit.n} & {fit.n_group1 / fit.n:.2f} / {fit.n_group0 / fit.n:.2f} & "
                      f"{fit.pseudo_r2:.3f} & {fit.tjur_r2:.3f} & {fit.lr_stat:.2f} & {p} \\\\")
     lines += ["\\bottomrule", "\\end{tabular}", "\\end{table}"]
-    return LatexTable("\n".join(lines), _name(stem, base, mu))
+    return LatexTable("\n".join(lines), name)
