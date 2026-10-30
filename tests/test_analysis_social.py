@@ -37,10 +37,13 @@ def expected_warnings(func, *args, **kwargs):
     return result, {w.category for w in caught if "legacy naming scheme" not in str(w.message)}
 
 
-def adaptive_csv(sim_dir, mu, seed, s=4, **sizes) -> pd.DataFrame:
-    stem = legacy_filename(dict(link_prob=0.1, init_w=0.2, beta=3.0, rho=1 / 3, eps=1.0, mu=mu, fixedBNat100=False,
+def adaptive_stem(mu, seed, s=4, **sizes) -> str:
+    return legacy_filename(dict(link_prob=0.1, init_w=0.2, beta=3.0, rho=1 / 3, eps=1.0, mu=mu, fixedBNat100=False,
                                 ext_strength=s, seed=seed, lam=0.0, n_events=1, **sizes), False)
-    return pd.read_csv(sim_dir / f"{stem}.csv")
+
+
+def adaptive_csv(sim_dir, mu, seed, s=4, **sizes) -> pd.DataFrame:
+    return pd.read_csv(sim_dir / f"{adaptive_stem(mu, seed, s, **sizes)}.csv")
 
 
 def seeds_of(mu):
@@ -166,6 +169,30 @@ def test_fig6_example_networks_are_drawn_with_a_local_rng_over_n(paper_fig6, sim
 def test_fig6_without_an_example_mu_is_not_applicable(sim_dir):
     with pytest.warns(FigureNotApplicable, match="0.05"):
         assert fig6(sim_dir, example_mus=(0.005, 0.05)) is None
+
+
+@pytest.fixture
+def extra_mu_dir(sim_dir, tmp_path):
+    """The fixture's runs (linked) plus μ = 0.05 at s = 4 for seeds {0, 2}, so that μ = 0.005 and 0.2 can drop out."""
+    for path in sim_dir.glob("*.csv"):
+        (tmp_path / path.name).symlink_to(path)
+    source = sim_dir / f"{adaptive_stem(0.005, SEED)}.csv"
+    for seed in (0, 2):
+        (tmp_path / f"{adaptive_stem(0.05, seed)}.csv").symlink_to(source)
+    return tmp_path
+
+
+@pytest.mark.parametrize("kwargs", [dict(min_seeds=2), dict(seeds=(0, 2))], ids=["min_seeds", "seeds"])
+def test_fig6_with_an_example_mu_left_off_the_x_axis_is_not_applicable(extra_mu_dir, kwargs):
+    with pytest.warns(FigureNotApplicable, match="0.005"):
+        assert fig6(extra_mu_dir, **kwargs) is None
+
+
+def test_fig6_matches_the_example_mus_to_the_plotted_mus_with_a_tolerance(sim_dir):
+    result, categories = expected_warnings(fig6, sim_dir, mus=[0.0, 0.005, 0.05, 0.2 + 1e-12])
+    assert FigureNotApplicable not in categories
+    assert set(result.data[result.data.panel == "B"].mu) == {0.2 + 1e-12}  # the plotted value
+    plt.close(result.figure)
 
 
 def test_fig6_without_the_example_seed_is_not_applicable(sim_dir):
