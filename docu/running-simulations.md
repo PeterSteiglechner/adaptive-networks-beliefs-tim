@@ -45,7 +45,9 @@ The default `param_combis` contains the four belief-network (BN) configurations 
 ## Runs needed for each analysis script
 
 The analysis scripts load files by exact filename, so the runs below must exist. The seed counts are
-the ones **hard-coded in the scripts**. The paper uses 100 seeds throughout.
+the ones **hard-coded in the scripts**. The paper uses 100 seeds throughout. The `anb.analysis` package doesn't need
+exact files: it finds runs by parameter and uses every seed it finds. What each of its figures needs is in
+[analysis-package.md](analysis-package.md#applicability-and-warnings).
 
 | Script | Mode | BN configs | `mu` | pressures $s$ | seeds |
 |--------|------|------------|------|---------------|-------|

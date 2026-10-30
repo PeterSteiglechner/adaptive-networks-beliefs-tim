@@ -13,6 +13,7 @@ Code documentation for the ANB model and its analysis pipeline. The theory and r
 | [running-simulations.md](running-simulations.md) | How to configure runs, filename conventions, and exactly which simulations each analysis script needs |
 | [known-issues.md](known-issues.md) | Open bugs and inconsistencies in the model and analysis code, each with location, impact and a suggested fix |
 | [analysis.md](analysis.md) | What each `analyse_*.py` script computes and which paper figure or table it produces |
+| [analysis-package.md](analysis-package.md) | The `anb.analysis` package: every paper figure and table from whatever runs a folder holds (runs found by parameter, `make_all`, CLI, notebook), the applicability rules and the reference |
 | [adr-001-numba-over-gpu.md](adr-001-numba-over-gpu.md) | Design decision: speed up the simulation with Numba on the CPU instead of a GPU |
 | [adr-002-testbed-architecture.md](adr-002-testbed-architecture.md) | Design decision: refactor into an `anb/` package with Agent/Network ABCs, an injectable model and a testbed |
 | [class-design.md](class-design.md) | Mermaid class diagrams of the `anb/` package (one namespace per module), responsibilities of each class, and the resolution of ADR-002's open points |
@@ -49,7 +50,12 @@ After a warm-up phase ($t=0$–$100$), a temporary **external pressure** $s$ pus
 conda activate anb                # or `uv sync` and prefix the commands with `uv run`
 python ANBmodel.py                # the frozen reference model; configure runs first, see running-simulations.md
 python analyse_timeseries.py      # then the other analysis scripts, see analysis.md
+python -m anb.analysis simOut_old_model figs   # or every applicable figure and table with the package
 ```
+
+The `anb.analysis` package ([analysis-package.md](analysis-package.md)) makes the same figures and tables from any
+simulation folder. It finds runs by parameter rather than by exact filename, uses every seed it finds and skips,
+with a warning, what the folder can't support. `../notebooks/analysis.ipynb` walks through it figure by figure.
 
 New runs should use the `anb/` package, which is about 46× faster and is configured from Python instead of by
 editing source. `../notebooks/demo.ipynb` walks through it. A run saved with `save("simOut")` (the default) lands in
