@@ -1,8 +1,9 @@
 # Analysis Package (`anb.analysis`)
 
-> **Status: planned.** This describes the design agreed in `.scratch/analysis-refactor/spec.md`. Update it as
-> the tickets land. The old `analyse_*.py` scripts ([analysis.md](analysis.md)) stay unchanged as the
-> reference.
+> **Status: in progress.** This describes the design agreed in `.scratch/analysis-refactor/spec.md`. Implemented
+> so far: `index_folder`, the core (`Baseline`, selection, warnings, `Loader`, `FigureResult`, style) and `fig2`
+> with `example_agent_stats` / `focal_sign_counts`. Update it as the tickets land. The old `analyse_*.py`
+> scripts ([analysis.md](analysis.md)) stay unchanged as the reference.
 
 `anb.analysis` makes the paper's figures and tables from **whatever runs a folder holds**. It finds runs by
 parameter, not by a hard-coded filename. Each figure and table is its own function, and `make_all` runs all of
@@ -75,7 +76,7 @@ The package writes the `_M{M:.2f}`, `_N{N:.2f}` and `_tau{tau:.2f}` suffixes onl
   warned about, and if none exist, the figure is not applicable.
 
 Default example agents that are missing, or that don't have the intended response type, are replaced by a
-seeded random agent of that type, with a warning.
+seeded random agent of that type, with an `ExampleAgentFallback` warning (also a `UserWarning`).
 
 | Item | Needs (on top of the base) | Paper seeds | Kwargs (defaults) |
 |------|----------------------------|-------------|-------------------|
@@ -104,8 +105,10 @@ A figure function returns a `FigureResult` with:
 - `data`: a tidy DataFrame of every plotted number;
 - `name`: the file stem.
 
-Figure functions never save or print anything. `result.save(out_dir, formats=("png",))` creates `out_dir` and
-writes PNG at 600 dpi, plus a PDF if `"pdf"` is in `formats`.
+Figure functions never save or print anything. Pass one `Loader()` to several figure functions (`loader=`) to
+read each request of a CSV only once, and a ready `index_folder(...)` (`index=`) to skip rescanning the folder.
+`result.save(out_dir, formats=("png",))` creates `out_dir` and writes PNG at 600 dpi, plus a PDF if `"pdf"` is in
+`formats`.
 
 Names are the old scripts' names (`fig2_adaptive_t100`, `fig3_responseFrequencies`, `fig4_mu0.0`,
 `fig5_metricChange_mu0.0`, `fig6_socialAdaptation`, `AppendixFig_…`). A base that differs from the paper's

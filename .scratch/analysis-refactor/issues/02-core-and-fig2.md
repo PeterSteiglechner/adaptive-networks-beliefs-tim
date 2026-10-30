@@ -15,12 +15,12 @@
 
 **Blocked by:** #01
 
-**Status:** open
+**Status:** done
 
-- [ ] `fig2` on the fixture returns a `FigureResult` whose `data` holds the plotted trajectories and edges
-- [ ] A missing detailed run gives `FigureNotApplicable` and `None`
-- [ ] An N = 50 run plots, and agent 61/79 fall back with a warning
-- [ ] `save` writes exactly the requested formats into a not-yet-existing directory
-- [ ] The name suffix rule holds for a `link_prob 0.2` base, and the paper base gets the old name
-- [ ] Figure functions write no files and print nothing
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] `fig2` on the fixture returns a `FigureResult` whose `data` holds the plotted trajectories and edges
+- [x] A missing detailed run gives `FigureNotApplicable` and `None`
+- [x] An N = 50 run plots, and agent 61/79 fall back with a warning
+- [x] `save` writes exactly the requested formats into a not-yet-existing directory
+- [x] The name suffix rule holds for a `link_prob 0.2` base, and the paper base gets the old name
+- [x] Figure functions write no files and print nothing
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
