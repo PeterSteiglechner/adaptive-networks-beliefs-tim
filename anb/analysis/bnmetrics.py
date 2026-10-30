@@ -4,8 +4,9 @@ pressure.
 Reproduces `analyse_BNmetrics.py`. Its `res` (one row per agent × seed × s × window, labelled with the agent's
 response) is `metric_frame`; the runs come from the index instead of the script's fixed seed and pressure lists. The
 Fig. A4 title states the three windows it pools (the old title named only the first). Fig. 4's Cohen's d and logit
-fits are the plain functions `cohens_d` and `logit_fit`, which the tables (`tables.py`) reuse. The old script's
-`greedy_uncorrelated_subset` works on Fig. A4's correlations.
+fits are the plain functions `cohens_d` and `logit_fit`, which the tables (`tables.py`) reuse, as they do the
+run selection (`selected_metric_frame`, `fig4_levels`, `fig4_before`) and `mu_name`; `anb.analysis` doesn't export
+those. The old script's `greedy_uncorrelated_subset` works on Fig. A4's correlations.
 """
 
 import string
@@ -82,8 +83,8 @@ def metric_frame(runs: pd.DataFrame, loader: Loader | None = None) -> pd.DataFra
     return pd.concat(blocks, ignore_index=True)
 
 
-def _selected_metric_frame(index, base: Baseline, mu, levels, *, item, seeds, min_seeds,
-                           loader) -> pd.DataFrame | None:
+def selected_metric_frame(index, base: Baseline, mu, levels, *, item, seeds, min_seeds,
+                          loader) -> pd.DataFrame | None:
     """`metric_frame` of the base at `mu` over each of `levels`, or `None` (after a `FigureNotApplicable`)."""
     config = replace(base, mu=mu)
     cells = [Cell(f"μ={mu:g} s={s}", config, s, seeds=seeds) for s in levels]
@@ -107,8 +108,8 @@ def fig5(sim_dir, *, base: Baseline = PAPER, mu=0.0, s=PAPER_S, seeds=None, min_
     if s == 0:
         raise ValueError("fig5 compares a pressure s > 0 with the s = 0 reference")
     index = index_folder(sim_dir) if index is None else index
-    frame = _selected_metric_frame(index, base, mu, (s, 0), item="fig5", seeds=seeds, min_seeds=min_seeds,
-                                   loader=loader)
+    frame = selected_metric_frame(index, base, mu, (s, 0), item="fig5", seeds=seeds, min_seeds=min_seeds,
+                                  loader=loader)
     if frame is None:
         return None
     plotted = _fig5_rows(frame, s)
@@ -183,14 +184,18 @@ def figA4(sim_dir, *, base: Baseline = PAPER, mu=0.0, seeds=None, min_seeds=1, l
         fig = _draw_figA4(corr)
     data = corr.rename_axis(index="metric", columns=None).reset_index().melt(id_vars="metric", var_name="other",
                                                                              value_name="r")
-    name = "AppendixFig_metricCorrelations" + (f"_mu{float(mu)}" if mu > 0 else "") + base.suffix(ignore=("mu",))
-    return FigureResult(fig, data, name)
+    return FigureResult(fig, data, mu_name("AppendixFig_metricCorrelations", base, mu))
+
+
+def mu_name(stem, base: Baseline, mu) -> str:
+    """`stem`, plus `_mu{mu}` for μ > 0 and the base suffix (μ left out of it): Fig. A4's and the tables' names."""
+    return stem + (f"_mu{float(mu)}" if mu > 0 else "") + base.suffix(ignore=("mu",))
 
 
 def _correlations(index, base: Baseline, mu, *, item, seeds, min_seeds, loader) -> pd.DataFrame | None:
     """Fig. A4's correlation matrix of `METRICS` (s = 0 for μ = 0, s = 4 for μ > 0, three windows pooled), or `None`."""
     s = 0 if mu == 0 else PAPER_S
-    frame = _selected_metric_frame(index, base, mu, (s,), item=item, seeds=seeds, min_seeds=min_seeds, loader=loader)
+    frame = selected_metric_frame(index, base, mu, (s,), item=item, seeds=seeds, min_seeds=min_seeds, loader=loader)
     return None if frame is None else frame[list(METRICS)].corr()
 
 
@@ -324,8 +329,13 @@ def logit_fit(before: pd.DataFrame, contrast: str, *, label: str = "") -> LogitF
                     n_group0=n0)
 
 
-def _fig4_before(index, base: Baseline, mu, levels, *, item, seeds, min_seeds,
-                 loader) -> tuple[pd.DataFrame, tuple] | None:
+def fig4_levels(pressures, mu) -> tuple:
+    """`pressures`, or Fig. 4's rule: `FIG4_PRESSURES` for μ = 0, s = 4 for μ > 0."""
+    return tuple(pressures) if pressures is not None else FIG4_PRESSURES if mu == 0 else (PAPER_S,)
+
+
+def fig4_before(index, base: Baseline, mu, levels, *, item, seeds, min_seeds,
+                loader) -> tuple[pd.DataFrame, tuple] | None:
     """The before-window `metric_frame` of the base at `mu` over the `levels` that have runs, and those levels.
 
     Missing levels get a `MissingLevelsWarning`; with none left, `None` (after a `FigureNotApplicable`).
@@ -340,8 +350,8 @@ def _fig4_before(index, base: Baseline, mu, levels, *, item, seeds, min_seeds,
     if missing:
         warnings.warn(f"{item}: leaving out {missing}, which have fewer than {min_seeds} run(s) of μ={mu:g}",
                       MissingLevelsWarning, stacklevel=3)
-    frame = _selected_metric_frame(index, base, mu, present, item=item, seeds=seeds, min_seeds=min_seeds,
-                                   loader=loader)
+    frame = selected_metric_frame(index, base, mu, present, item=item, seeds=seeds, min_seeds=min_seeds,
+                                  loader=loader)
     return None if frame is None else (frame[frame.t == BEFORE], present)
 
 
@@ -358,9 +368,9 @@ def fig4(sim_dir, *, base: Baseline = PAPER, mu=0.0, pressures=None, contrast2_p
 
     `data`: contrast, s, metric, d, coefficient, ci_low, ci_high (NaN where not drawn).
     """
-    levels = tuple(pressures) if pressures is not None else FIG4_PRESSURES if mu == 0 else (PAPER_S,)
+    levels = fig4_levels(pressures, mu)
     index = index_folder(sim_dir) if index is None else index
-    selected = _fig4_before(index, base, mu, levels, item="fig4", seeds=seeds, min_seeds=min_seeds, loader=loader)
+    selected = fig4_before(index, base, mu, levels, item="fig4", seeds=seeds, min_seeds=min_seeds, loader=loader)
     if selected is None:
         return None
     before, present = selected

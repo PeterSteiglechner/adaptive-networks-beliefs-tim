@@ -11,6 +11,7 @@ import pytest
 
 from anb.analysis import Loader, greedy_uncorrelated_subset, index_folder, table3, tableA5, tableA6, tableA7
 from anb.analysis.style import METRIC_LABELS
+from analysis_helpers import squash
 from old_scripts import OLD_SIM_DIR
 
 pytestmark = pytest.mark.slow
@@ -22,10 +23,6 @@ TABLEA5_START = "% Change over time"
 # columns with the s = 0 reference ones (R95, ref95, R145, ref145, R195, ref195). The package puts the reference
 # last, as the paper does: these are the old cell positions in the new order.
 TABLEA5_ORDER = [0, 1, 2, 3, 4, 5, 6, 8, 10, 7, 9, 11]
-
-
-def squash(text: str) -> str:
-    return re.sub(r"\s+", "", text)
 
 
 @pytest.fixture(scope="module")

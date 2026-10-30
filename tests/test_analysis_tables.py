@@ -1,11 +1,10 @@
 """`anb.analysis` Tables 3, A1–A7, `save_table` and the greedy metric subset, on the folder of `sim_folder.py`.
 
 The fixture's paper base has the adaptive config at s ∈ {0, 1, 4} × seeds {0, 1, 2} for μ = 0, and μ ∈ {0.005, 0.2}
-at s = 4 for seed 1 only. The `link_prob 0.2` base has adaptive at s = 4 only, so it lacks the s = 0 reference. The expected LaTeX is built here the way the old
-script printed it, from the CSVs read directly.
+at s = 4 for seed 1 only. The `link_prob 0.2` base has adaptive at s = 4 only, so it lacks the s = 0 reference. The
+expected LaTeX is built here the way the old script printed it, from the CSVs read directly.
 """
 
-import re
 import warnings
 
 import numpy as np
@@ -19,22 +18,11 @@ from anb.analysis import (
 from anb.analysis.bnmetrics import METRICS, NEGATIVE, PREDICTORS, WINDOWS
 from anb.analysis.style import METRIC_LABELS
 from anb.io import legacy_filename
+from analysis_helpers import expected_warnings, squash
 
 RESPONSE_COLUMNS = ["persistPos", "nonpersistPos", "compliant", "resilient", "resistant", "latecompliant"]
 GREEDY_CANDIDATES = ["x_focal", "n_nbs", "tb_tot", "tb_foc", "absOm_tot", "absOm_foc", "clust", "bc_foc",
                      "extr_nonfoc"]
-
-
-def expected_warnings(func, *args, **kwargs):
-    """`func(...)` and the categories it warned with (the stray-file warning of the index left out)."""
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        result = func(*args, **kwargs)
-    return result, {w.category for w in caught if "legacy naming scheme" not in str(w.message)}
-
-
-def squash(text: str) -> str:
-    return re.sub(r"\s+", "", text)
 
 
 def res(sim_dir, levels=(0, 1, 4)) -> pd.DataFrame:
@@ -204,8 +192,21 @@ def test_the_fit_tables_hold_one_row_per_available_pressure(sim_dir, old_res, fu
 def test_tableA7_uses_only_the_second_contrasts_pressures(sim_dir):
     table, _ = expected_warnings(tableA7, sim_dir, contrast2_pressures=(4,))
     assert list(fit_rows(table)) == [4]
+
+
+def test_tableA6_uses_only_the_given_pressures(sim_dir):
     table, _ = expected_warnings(tableA6, sim_dir, pressures=(4,))
     assert list(fit_rows(table)) == [4]
+
+
+@pytest.mark.parametrize("func", [tableA6, tableA7])
+def test_the_fit_tables_warn_at_the_callers_line(sim_dir, func):
+    """The level warnings point at the call of `tableA6`/`tableA7`, not into the package."""
+    for kwargs, category in (({}, MissingLevelsWarning), (dict(mu=0.05), FigureNotApplicable)):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            func(sim_dir, **kwargs)
+        assert [w.filename for w in caught if w.category is category] == [__file__]
 
 
 def test_tableA7_without_any_pressure_of_the_second_contrast_is_not_applicable(sim_dir):
