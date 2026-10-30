@@ -1,7 +1,7 @@
 """`anb.analysis` Fig. 4, Fig. 5, Fig. A4 and the agent-metric frame, on the synthetic folder of `sim_folder.py`.
 
-The fixture's paper base has the adaptive config at s ∈ {0, 1, 4} × seeds {0, 1, 2} (μ = 0 only). The `link_prob 0.2`
-base has adaptive at s = 4 only, so it lacks the s = 0 reference.
+The fixture's paper base has the adaptive config at s ∈ {0, 1, 4} × seeds {0, 1, 2} for μ = 0, and μ ∈ {0.005, 0.2}
+at s = 4 for seed 1 only. The `link_prob 0.2` base has adaptive at s = 4 only, so it lacks the s = 0 reference.
 """
 
 import warnings
@@ -161,11 +161,11 @@ def test_figA4_without_the_s0_runs_is_not_applicable(sim_dir):
 
 def test_figA4_for_mu_above_zero_needs_s4_at_that_mu(sim_dir):
     with pytest.warns(FigureNotApplicable, match="s=4"):
-        assert figA4(sim_dir, mu=0.005) is None
+        assert figA4(sim_dir, mu=0.05) is None
 
 
 def test_figA4_name_for_mu_above_zero_and_a_non_paper_base(sim_dir, monkeypatch):
-    """The fixture has no μ > 0 runs: pretend its adaptive s = 4 runs are μ = 0.005 ones."""
+    """Pretend every adaptive run is a μ = 0.005 one (the fixture has no μ > 0 for `link_prob 0.2`)."""
     index = index_folder(sim_dir)
     index.loc[(index.eps == 1) & ~index.fixedBNat100.astype(bool), "mu"] = 0.005
     result, _ = expected_warnings(figA4, sim_dir, mu=0.005, index=index)
@@ -327,7 +327,7 @@ def test_fig4_leaves_out_the_dots_of_a_failed_fit(sim_dir, monkeypatch):
 
 def test_fig4_at_a_missing_mu_is_not_applicable(sim_dir):
     with pytest.warns(FigureNotApplicable, match="s=4"):
-        assert fig4(sim_dir, mu=0.005) is None
+        assert fig4(sim_dir, mu=0.05) is None
 
 
 def test_fig4_without_any_listed_pressure_is_not_applicable(sim_dir):
