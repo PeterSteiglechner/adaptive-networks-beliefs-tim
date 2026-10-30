@@ -172,6 +172,39 @@ def test_a_shared_loader_reads_each_request_once(index, monkeypatch):
     assert second.frame is first.frame
 
 
+def test_the_loader_counts_its_reads_and_cuts_requests_from_what_it_holds(index):
+    path = runs(index, PAPER, s=4).path.iloc[0]
+    loader = Loader()
+
+    loader.load(path, t=[95.5], columns=["tb_tot"])
+    loader.load(path, t=[95.5], columns=["tb_tot"])
+    assert loader.reads[path] == 1
+    loader.load(path, t=[95.5, 100], columns=["Hpers"])  # not held yet: read again, for both requests
+    assert loader.reads[path] == 2
+    cut = loader.load(path, t=[95.5], columns=["tb_tot"])
+
+    assert loader.reads[path] == 2 and loader.cached == 1
+    pd.testing.assert_frame_equal(cut.frame, Loader().load(path, t=[95.5], columns=["tb_tot"]).frame)
+
+
+@pytest.mark.parametrize("detailed, requests", [
+    (False, [dict(t=(95.5, 100), columns=("compliant", "0"), edges=True), dict(t=(95.5, 145.5, 195.5),
+             columns=("n_nbs", "tb_foc", "compliant")), dict(t=(95.5,), columns=("resistant",))]),
+    (True, [dict(t=range(0, 101), columns=("tb_tot",), beliefs=True, edges=True), dict(columns=("Hpers", "0"))]),
+])
+def test_a_whole_loader_reads_each_csv_once(index, detailed, requests):
+    path = runs(index, PAPER, s=4, detailed=detailed).path.iloc[0]
+    loader = Loader(whole=True)
+
+    got = [loader.load(path, **request) for request in requests]
+
+    assert loader.reads == {path: 1}
+    for run, request in zip(got, requests):
+        expected = Loader().load(path, **request)
+        pd.testing.assert_frame_equal(run.frame, expected.frame)
+        assert run.layout == expected.layout
+
+
 # FigureResult
 
 def make_result(name="fig_test"):

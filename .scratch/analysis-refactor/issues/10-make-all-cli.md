@@ -15,11 +15,11 @@
 
 **Blocked by:** #04, #07, #08, #09
 
-**Status:** open
+**Status:** done
 
-- [ ] On the fixture: the report has an entry for every item, and skipped items name their reason
-- [ ] A forced error in one item doesn't stop the others, and `strict=True` raises
-- [ ] Each CSV is read at most once per call (checked with the loader's counters)
-- [ ] The CLI writes the same files as the API call
-- [ ] Slow: `make_all(simOut_old_model, tmp)` produces every paper figure and table without errors
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] On the fixture: the report has an entry for every item, and skipped items name their reason
+- [x] A forced error in one item doesn't stop the others, and `strict=True` raises
+- [x] Each CSV is read at most once per call (checked with the loader's counters)
+- [x] The CLI writes the same files as the API call
+- [x] Slow: `make_all(simOut_old_model, tmp)` produces every paper figure and table without errors
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
