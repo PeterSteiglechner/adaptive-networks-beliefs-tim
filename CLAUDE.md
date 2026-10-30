@@ -17,6 +17,7 @@ We use conda with the `anb` env (Python 3.12). The `uv` route below still works 
 conda activate anb
 python ANBmodel.py                # runs the sweep configured in its __main__ block
 python analyse_timeseries.py      # analysis scripts; each is a # %% cell script, also run interactively
+python -m anb.analysis simOut_old_model figs   # every applicable figure and table via the package (--help)
 ```
 
 With `uv` instead:
@@ -25,6 +26,7 @@ With `uv` instead:
 uv sync
 uv run ANBmodel.py
 uv run analyse_timeseries.py
+uv run python -m anb.analysis simOut_old_model figs
 ```
 
 Tests (`tests/`, pytest config in `pyproject.toml`) cover the `anb/` package. `anb` is installed editable
@@ -48,6 +50,14 @@ as `run_one` builds them, so if you change how `run_one` formats a filename (`f"
 `seed`/`ext_strength` unformatted, the bare `fixedBNat100` token) the analysis scripts break.
 `docu/running-simulations.md` lists exactly which runs (seeds, pressures, μ values, sensitivity suffixes)
 each script expects. The README table is incomplete.
+
+**`anb.analysis` replaces the scripts for new figures** and no longer needs exact files. It indexes a folder by
+parsing every legacy filename (`anb.io.parse_filename`, the inverse of `legacy_filename`: change the naming scheme
+in both), finds each figure's runs by parameter, uses every seed it finds and skips a figure whose runs are missing
+with a `FigureNotApplicable` warning. One function per paper figure/table, `make_all`, a CLI and
+`notebooks/analysis.ipynb`. The scripts stay frozen as its reference. `docu/analysis-package.md` is the reference
+(applicability rules, names, signatures; its "Reference" stubs are checked by `tests/test_analysis_docs.py`), and
+`tests/test_old_vs_new_*.py` (slow) compare it with the scripts on `simOut_old_model`.
 
 **Configuring a run means editing source.** The swept parameters (`param_combis` =
 `[link_prob, init_w, beta, rho, eps, mu, fixedBNat100]`, `pressures`, `seeds`, `detail`) are set in the

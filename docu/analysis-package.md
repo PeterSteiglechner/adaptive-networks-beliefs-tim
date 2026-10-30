@@ -1,16 +1,11 @@
 # Analysis Package (`anb.analysis`)
 
-> **Status: in progress.** This describes the design agreed in `.scratch/analysis-refactor/spec.md`. Implemented
-> so far: `index_folder`, the core (`Baseline`, selection, warnings, `Loader`, `FigureResult`, style) and `fig2`
-> with `example_agent_stats` / `focal_sign_counts`, `fig3` / `figA3` / `polarisation_summary`, and `fig4` / `fig5` /
-> `figA4` with their shared `metric_frame` (and `cohens_d` / `logit_fit` for Fig. 4), the tables `table3` /
-> `tableA5` / `tableA6` / `tableA7` with `save_table` and `greedy_uncorrelated_subset`, `fig6` / `figA7`, `figA8`,
-> and `make_all` with its report and the CLI. Update it as the tickets land. The old `analyse_*.py` scripts
-> ([analysis.md](analysis.md)) stay unchanged as the reference.
-
 `anb.analysis` makes the paper's figures and tables from **whatever runs a folder holds**. It finds runs by
 parameter, not by a hard-coded filename. Each figure and table is its own function, and `make_all` runs all of
-them. A figure whose runs are missing is skipped with a warning.
+them. A figure whose runs are missing is skipped with a warning. The old `analyse_*.py` scripts
+([analysis.md](analysis.md)) stay unchanged as the reference. Unlike them, the package doesn't need an exact
+set of files: it uses every seed it finds, names the missing runs in a warning, and finds M/N/τ and network variants
+by parameter.
 
 ## Quick start
 
@@ -33,6 +28,12 @@ save_table(table3("simOut_old_model", s=4), "figs")                # → figs/ta
 python -m anb.analysis simOut_old_model figs --figs fig3,fig4 --formats png,pdf [--strict]
 python -m anb.analysis simOut_new_model figs_p02 --base link_prob=0.2 --mus 0 --no-tables
 ```
+
+[`notebooks/analysis.ipynb`](../notebooks/analysis.ipynb) runs the package figure by figure and then `make_all`. Set
+`SIM_DIR`, `OUT_DIR`, `BASE` and `FORMATS` in its cell tagged `parameters`, right after the imports.
+`tests/test_notebook.py` runs it on the synthetic test folder.
+
+The [reference](#reference) at the end lists every function's signature.
 
 ## How runs are found
 
@@ -90,7 +91,7 @@ seeded random agent of that type, with an `ExampleAgentFallback` warning (also a
 | Item | Needs (on top of the base) | Paper seeds | Kwargs (defaults) |
 |------|----------------------------|-------------|-------------------|
 | `fig2` (Fig. 2, A1, A2) | detailed run, BN config, `s`, `seed` | 1 | `config="adaptive"`, `seed=2`, `s=4`, `agents=(61, 79)` |
-| `fig3` | ensemble: all 4 configs × s > 0 levels, plus a detailed adaptive run for panel A | 100 (old script: 20) | `seeds=None`, `example_seed=1`, `example_s=4`, `example_agents={resistant: 4, resilient: 53, compliant: 16}`, `denominator` (the four types incl. `latecompliant`) |
+| `fig3` | ensemble: all 4 configs × s > 0 levels, plus a detailed adaptive run for panel A | 100 (old script: 20) | `seeds=None`, `example_seed=1`, `example_s=4`, `example_agents=None` (resistant 4, resilient 53, compliant 16), `denominator` (the four types incl. `latecompliant`) |
 | `polarisation_summary` | ensemble: all 4 configs × s ≥ 0 levels | 100 (old script: 20) | `seeds=None` |
 | `figA3` | detailed adaptive run for each s ∈ {0, 1, 2, 4, 8, 16} | 1 | `seed=1`, `rng_seed=14` |
 | `fig4` (Fig. 4, A5, A6) | ensemble at `mu` (replacing the base's μ): s ∈ {1, 2, 4, 8, 16} for μ = 0, s = 4 for μ > 0 | 100 | `mu=0.0`, `pressures=None` (paper rule), `contrast2_pressures=(1, 2, 4)`, `seeds=None` |
@@ -170,7 +171,7 @@ A key is the function name plus the arguments that tell the attempts apart: `fig
 `fig4 mu=0.005`, `table3 s=4 mu=0.0`, `fig3`. `figs` takes function names (`["fig4", "table3"]`) or keys
 (`["fig4 mu=0.005"]`) to restrict the run; an unknown one is a `ValueError`. The warnings the items emit are
 recorded for the report and emitted again, through your filters. The report is printed as a summary (one line per
-item, paths relative to `out_dir`); `format_report(report, out_dir)` gives that text.
+item, paths relative to `out_dir`); `format_report(report, out_dir=None)` gives that text.
 
 All items share one `Loader(whole=True)`: the first request of a CSV reads all its columns (ensemble runs at the
 rows the figures use, t = 95.5 / 100 / 145.5 / 195.5; detailed runs whole), and later requests are cut from it, so
@@ -272,3 +273,144 @@ RGB values differ by more than 0.05.
 
 Fig. 3's strip plots jitter with the global NumPy RNG (seaborn has no RNG argument). The old script leaves it
 unseeded, and the package seeds it per figure and restores it afterwards, so a figure is the same on every run.
+
+## Reference
+
+Everything `anb.analysis` exports, as stubs. All figure, table and summary functions take the folder first and
+everything else by keyword, and return `None` (with a `FigureNotApplicable`) when they don't apply. `loader` and
+`index` are a shared `Loader` and a ready `index_folder(sim_dir)`; `None` makes fresh ones. `seeds=None` uses every
+seed, and `min_seeds` is the number of runs a cell needs. `tests/test_analysis_docs.py` checks these stubs against the
+code (parameter names, kinds and defaults, dataclass fields).
+
+```python
+# Finding runs (index, select)
+def index_folder(sim_dir) -> pd.DataFrame: ...  # link_prob … seed, lam, n_events, M, N, tau, detailed, path
+def runs(index, base, *, s=None, detailed=False, seeds=None) -> pd.DataFrame: ...  # the index rows of base
+def select(index, cells, *, item, paper_seeds, min_seeds=1) -> dict[str, pd.DataFrame] | None: ...
+
+class Baseline:  # frozen dataclass; PAPER = Baseline()
+    link_prob: float = 0.1
+    beta: float = 3.0
+    rho: float = 0.33
+    init_w: float = 0.2
+    eps: float = 1.0
+    mu: float = 0.0
+    fixedBNat100: bool = False
+    lam: float = 0.0
+    n_events: int = 1
+    M: int = 10
+    N: int = 100
+    tau: int = 1
+    def config(self, name) -> Baseline: ...  # with the BN fields of CONFIGS[name]
+    def rounded(self) -> dict: ...  # the fields as file names write them
+    def suffix(self, ignore=()) -> str: ...  # the name suffix: tokens of the fields that differ from PAPER
+
+class Cell:  # frozen dataclass: one structural requirement of a figure
+    label: str
+    base: Baseline
+    s: float
+    detailed: bool = False
+    seeds: Sequence[int] | None = None
+    def runs(self, index) -> pd.DataFrame: ...
+
+class FigureNotApplicable(UserWarning): ...
+class FewSeedsWarning(UserWarning): ...
+class MissingLevelsWarning(UserWarning): ...
+class FitWarning(UserWarning): ...
+class ExampleAgentFallback(UserWarning): ...
+class FigureFailed(UserWarning): ...
+
+# Reading runs (load)
+class Loader:  # dataclass
+    whole: bool = False
+    reads: Counter = Counter()  # disk reads per path; .cached is the number of CSVs held
+    def load(self, path, *, t=None, columns=(), beliefs=False, edges=False) -> Run: ...
+
+class Run:  # frozen dataclass
+    path: Path
+    frame: pd.DataFrame
+    layout: Layout
+
+class Layout:  # frozen dataclass; .beliefs and .edges are the column names
+    M: int
+    N: int
+    tau: int
+
+# Output (output)
+class FigureResult:  # dataclass
+    figure: Figure
+    data: pd.DataFrame
+    name: str
+    def save(self, out_dir, formats=("png",)) -> list[Path]: ...
+
+class LatexTable(str): ...  # LatexTable(latex, name): the LaTeX, with the file stem in .name
+def save_table(latex, out_dir, name=None) -> Path: ...
+
+# Fig. 2, A1, A2 (timeseries)
+def fig2(sim_dir, *, base=PAPER, config="adaptive", seed=2, s=4, agents=(61, 79), loader=None,
+         index=None) -> FigureResult | None: ...
+def example_agent_stats(sim_dir, *, base=PAPER, config="adaptive", seed=2, s=4, agents=(61, 79), loader=None,
+                        index=None) -> pd.DataFrame | None: ...
+def focal_sign_counts(sim_dir, *, base=PAPER, config="adaptive", seed=2, s=4, loader=None,
+                      index=None) -> pd.DataFrame | None: ...
+
+# Fig. 3, A3 (responses)
+def fig3(sim_dir, *, base=PAPER, seeds=None, example_seed=1, example_s=4, example_agents=None,
+         denominator=("compliant", "resilient", "resistant", "latecompliant"), min_seeds=1, loader=None,
+         index=None) -> FigureResult | None: ...  # example_agents=None: resistant 4, resilient 53, compliant 16
+def figA3(sim_dir, *, base=PAPER, seed=1, rng_seed=14, loader=None, index=None) -> FigureResult | None: ...
+def polarisation_summary(sim_dir, *, base=PAPER, seeds=None, min_seeds=1, loader=None,
+                         index=None) -> pd.DataFrame | None: ...
+
+# Fig. 4, 5, A4 and their statistics (bnmetrics)
+def fig4(sim_dir, *, base=PAPER, mu=0.0, pressures=None, contrast2_pressures=(1, 2, 4), seeds=None, min_seeds=1,
+         loader=None, index=None) -> FigureResult | None: ...
+def fig5(sim_dir, *, base=PAPER, mu=0.0, s=4, seeds=None, min_seeds=1, loader=None,
+         index=None) -> FigureResult | None: ...
+def figA4(sim_dir, *, base=PAPER, mu=0.0, seeds=None, min_seeds=1, loader=None, index=None) -> FigureResult | None: ...
+def greedy_uncorrelated_subset(sim_dir, *, base=PAPER, mu=0.0, metrics=GREEDY_CANDIDATES, n=None, seeds=None,
+                               min_seeds=1, loader=None, index=None) -> pd.DataFrame | None: ...
+def metric_frame(runs, loader=None) -> pd.DataFrame: ...
+def cohens_d(before, contrast) -> pd.Series: ...
+def logit_fit(before, contrast, *, label="") -> LogitFit | None: ...
+
+class LogitFit:  # frozen dataclass
+    contrast: str
+    coefficients: pd.DataFrame
+    pseudo_r2: float
+    tjur_r2: float
+    lr_stat: float
+    lr_p: float
+    n: int
+    n_group1: int
+    n_group0: int
+
+# Tables 3, A1–A7 (tables)
+def table3(sim_dir, *, s, base=PAPER, mu=0.0, seeds=None, min_seeds=1, loader=None,
+           index=None) -> LatexTable | None: ...
+def tableA5(sim_dir, *, base=PAPER, mu=0.0, seeds=None, min_seeds=1, loader=None, index=None) -> LatexTable | None: ...
+def tableA6(sim_dir, *, base=PAPER, mu=0.0, pressures=None, seeds=None, min_seeds=1, loader=None,
+            index=None) -> LatexTable | None: ...
+def tableA7(sim_dir, *, base=PAPER, mu=0.0, pressures=None, contrast2_pressures=(1, 2, 4), seeds=None, min_seeds=1,
+            loader=None, index=None) -> LatexTable | None: ...
+
+# Fig. 6, A7 (social)
+def fig6(sim_dir, *, base=PAPER, mus=None, example_seed=1, example_mus=(0.005, 0.2), agent_rng_seed=42,
+         denominator=("compliant", "resilient", "resistant"), seeds=None, min_seeds=1, loader=None,
+         index=None) -> FigureResult | None: ...
+def figA7(sim_dir, *, base=PAPER, seed=99, s=4, mus=(0.0, 0.005, 0.2), loader=None,
+          index=None) -> FigureResult | None: ...
+
+# Fig. A8 (sensitivity)
+def figA8(sim_dir, *, base=PAPER, rows=None, seeds=None, min_seeds=1, loader=None,
+          index=None) -> FigureResult | None: ...
+
+# Everything (runner)
+def make_all(sim_dir, out_dir, *, base=PAPER, formats=("png",), figs=None, tables=True, mus=(0.0, 0.005, 0.05),
+             min_seeds=1, strict=False, loader=None, index=None) -> dict[str, list[Path] | str]: ...
+def format_report(report, out_dir=None) -> str: ...
+```
+
+`GREEDY_CANDIDATES` are the old script's nine candidates: `x_focal, n_nbs, tb_tot, tb_foc, absOm_tot, absOm_foc,
+clust, bc_foc, extr_nonfoc`. `CONFIGS` maps `staticlow`, `statichigh`, `adaptive2static` and `adaptive` to their
+`(init_w, eps, mu, fixedBNat100)`, as in the table under [How runs are found](#how-runs-are-found).

@@ -5,6 +5,10 @@ the paper's figures and tables in `figs/`. `ANBmodel.py` writes into `simOut_old
 folder to `simOut/` first. Each script is organised into `# %%` cells, so it can be run as a whole
 (`uv run analyse_X.py`) or cell by cell in VS Code or Jupyter.
 
+To make these figures and tables from any simulation folder, without editing a script, use the `anb.analysis`
+package instead ([analysis-package.md](analysis-package.md)). It finds runs by parameter, and these scripts stay
+unchanged as its reference.
+
 For which simulations each script needs, see
 [running-simulations.md](running-simulations.md#runs-needed-for-each-analysis-script). For the meaning of
 the metric columns, see [model.md §8](model.md#8-metrics-get_energies-get_metrics-fill_metrics).
