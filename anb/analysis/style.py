@@ -23,6 +23,10 @@ RC = {
     "legend.fontsize": SMALL_FS,
 }
 
+# `analyse_responseFrequencies.py`'s and `analyse_BNmetrics.py`'s rc settings, on matplotlib's default style.
+SCRIPT_RC = {"font.size": 9, "axes.titlesize": 9, "axes.labelsize": 9, "legend.fontsize": 7, "xtick.labelsize": 7,
+             "ytick.labelsize": 7}
+
 
 @contextmanager
 def figure_style(rc=RC):
@@ -55,6 +59,23 @@ RESPONSE_COLORS = {
     "resistant": "#F44336",
     "latecompliant": "#90CAF9",
     "NA": "#9E9E9E",
+}
+
+# BN metrics (CSV columns, plus `Hpersnonfoc` = `Hpers` − `Hpersfoc`) in the old scripts' table order, in words
+# (`metric2titleVerb`).
+METRIC_LABELS = {
+    "x_focal": "focal belief",
+    "extr_nonfoc": "extremity non-focal beliefs",
+    "n_nbs": "nr social contacts",
+    "absOm_tot": "connectedness BN",
+    "absOm_foc": "connectedness focal BN",
+    "tb_tot": "balance BN",
+    "tb_foc": "balance focal BN",
+    "clust": "clustering BN",
+    "bc_foc": "centrality focal BN",
+    "Hpersfoc": "dissonance focal BN",
+    "Hpersnonfoc": "dissonance non-focal BN",
+    "Hsoc": "dissonance focal social",
 }
 
 EXAMPLE_AGENT_COLORS = ("#27ae60", "#9b59b6")  # Fig. 2's two highlighted agents

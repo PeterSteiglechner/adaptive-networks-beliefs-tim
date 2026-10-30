@@ -10,9 +10,9 @@
 
 **Blocked by:** #03
 
-**Status:** open
+**Status:** done
 
-- [ ] On the fixture: a missing s = 0 reference gives `FigureNotApplicable` for both figures
-- [ ] Slow: the Fig. 5 means and sds and the Fig. A4 correlation matrix match the old script on `simOut_old_model`
-- [ ] The Fig. A4 title names the pooled windows
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] On the fixture: a missing s = 0 reference gives `FigureNotApplicable` for both figures
+- [x] Slow: the Fig. 5 means and sds and the Fig. A4 correlation matrix match the old script on `simOut_old_model`
+- [x] The Fig. A4 title names the pooled windows
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass

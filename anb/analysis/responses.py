@@ -21,7 +21,7 @@ from .load import Loader, Run
 from .output import FigureResult
 from .select import (CONFIG_FIELDS, CONFIGS, PAPER, Baseline, Cell, ExampleAgentFallback, FigureNotApplicable,
                      MissingLevelsWarning, runs, select)
-from .style import CONFIG_LABELS, FOCAL, RESPONSE_COLORS, figure_style, pressure_alpha
+from .style import CONFIG_LABELS, FOCAL, RESPONSE_COLORS, SCRIPT_RC, figure_style, pressure_alpha
 
 RESPONSES = ("compliant", "resilient", "resistant", "latecompliant")  # Fig. 3's denominator includes latecompliant
 PLOTTED = ("compliant", "resilient", "resistant")
@@ -36,9 +36,7 @@ METRICS = ("std_focal", "abs_edge", "mean_edge", "groupishness", "nr_negs")
 
 _ENSEMBLE_COLUMNS = (*RESPONSES, str(FOCAL))
 _DETAILED_COLUMNS = (*PLOTTED, str(FOCAL))
-_FS, _SMALL_FS = 9, 7
-_RC = {"font.size": _FS, "axes.titlesize": _FS, "axes.labelsize": _FS, "legend.fontsize": _SMALL_FS,
-      "xtick.labelsize": _SMALL_FS, "ytick.labelsize": _SMALL_FS}  # the old script's, on matplotlib's default style
+_FS, _SMALL_FS = SCRIPT_RC["font.size"], SCRIPT_RC["legend.fontsize"]
 
 
 def _grid(index, base: Baseline, levels, *, item, seeds, min_seeds) -> dict | None:
@@ -141,7 +139,7 @@ def fig3(sim_dir, *, base: Baseline = PAPER, seeds=None, example_seed=1, example
     run = loader.load(path, columns=_DETAILED_COLUMNS)
     agents = _example_agents(run, example_agents)
     data = _frequencies(_per_run(grid, base, loader), denominator)
-    with figure_style(_RC), _seeded_jitter(JITTER_SEED):
+    with figure_style(SCRIPT_RC), _seeded_jitter(JITTER_SEED):
         fig = _draw_fig3(data, run, agents, int(example[cell.label].s.iloc[0]))
     return FigureResult(fig, data, "fig3_responseFrequencies" + base.suffix(ignore=CONFIG_FIELDS))
 
@@ -275,7 +273,7 @@ def figA3(sim_dir, *, base: Baseline = PAPER, seed=1, rng_seed=14, loader=None, 
             if len(ids) > 0:
                 drawn[name] = int(ids.sample(random_state=rs).iloc[0])
         panels.append((s, run, drawn))
-    with figure_style(_RC):
+    with figure_style(SCRIPT_RC):
         fig = _draw_figA3(panels)
     name = f"AppendixFig_exampleSim_adaptive_seed{seed}_overPressure" + base.suffix(ignore=CONFIG_FIELDS)
     return FigureResult(fig, _figA3_data(panels), name)

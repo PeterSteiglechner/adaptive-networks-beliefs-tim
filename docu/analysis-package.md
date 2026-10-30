@@ -2,7 +2,8 @@
 
 > **Status: in progress.** This describes the design agreed in `.scratch/analysis-refactor/spec.md`. Implemented
 > so far: `index_folder`, the core (`Baseline`, selection, warnings, `Loader`, `FigureResult`, style) and `fig2`
-> with `example_agent_stats` / `focal_sign_counts`, and `fig3` / `figA3` / `polarisation_summary`. Update it as the tickets land. The old `analyse_*.py`
+> with `example_agent_stats` / `focal_sign_counts`, `fig3` / `figA3` / `polarisation_summary`, and `fig5` / `figA4`
+> with their shared `metric_frame`. Update it as the tickets land. The old `analyse_*.py`
 > scripts ([analysis.md](analysis.md)) stay unchanged as the reference.
 
 `anb.analysis` makes the paper's figures and tables from **whatever runs a folder holds**. It finds runs by
@@ -86,8 +87,8 @@ seeded random agent of that type, with an `ExampleAgentFallback` warning (also a
 | `polarisation_summary` | ensemble: all 4 configs × s ≥ 0 levels | 100 (old script: 20) | `seeds=None` |
 | `figA3` | detailed adaptive run for each s ∈ {0, 1, 2, 4, 8, 16} | 1 | `seed=1`, `rng_seed=14` |
 | `fig4` (Fig. 4, A5, A6) | ensemble adaptive at `mu`: s > 0 levels for μ = 0, s = 4 for μ > 0 | 100 | `mu=0.0`, `contrast2_pressures=(1, 2, 4)` |
-| `fig5` | ensemble adaptive at `mu`: s = 4 and the s = 0 reference | 100 | `mu=0.0`, `s=4` |
-| `figA4` | ensemble adaptive: s = 0 (μ = 0) or s = 4 (μ > 0) | 100 | `mu=0.0` |
+| `fig5` | ensemble at `mu` (replacing the base's μ): `s` and the s = 0 reference | 100 | `mu=0.0`, `s=4`, `seeds=None` |
+| `figA4` | ensemble at `mu` (replacing the base's μ): s = 0 (μ = 0) or s = 4 (μ > 0) | 100 | `mu=0.0`, `seeds=None` |
 | `fig6` | ensemble adaptive, s = 4, at least two μ values, plus the example μ values for A/B | 100 | `mus=None` (all present), `example_seed=1`, `example_mus=(0.005, 0.2)`, `agent_rng_seed=42` |
 | `figA7` | ensemble adaptive, s = 4, each listed μ for `seed` | 1 | `seed=99`, `s=4`, `mus=(0, 0.005, 0.2)` |
 | `figA8` | ensemble s = 4: the base, plus each OFAT row (`M, N, beta, p, tau, eps, init_w`) for its configs | 100 | `rows=None` (all) |
@@ -115,7 +116,7 @@ read each request of a CSV only once, and a ready `index_folder(...)` (`index=`)
 Names are the old scripts' names (`fig2_adaptive_t100`, `fig3_responseFrequencies`, `fig4_mu0.0`,
 `fig5_metricChange_mu0.0`, `fig6_socialAdaptation`, `AppendixFig_…`). A base that differs from the paper's
 baseline appends the differing fields as legacy tokens (`_link_prob0.20`, `_M15.00`), so variants don't
-overwrite the paper figures.
+overwrite the paper figures. `fig5` at an `s` other than 4 appends `_s{s}`.
 
 A table function returns its LaTeX string. `save_table(latex, out_dir)` writes it to `out_dir/tables/<name>.tex`.
 
@@ -132,6 +133,8 @@ These functions return DataFrames:
   `groupishness` and `nr_negs`. Columns are `(metric, "mean" | "std")` plus `("n_runs", "")`;
 - `example_agent_stats`: the `tb_tot`, `tb_foc` and `Hpers` of the Fig. 2 agents at t = 100;
 - `focal_sign_counts`;
+- `metric_frame(runs, loader)`: the old `res` of `analyse_BNmetrics.py` for some index rows, one row per
+  run × window × agent with the agent's response (from the 95.5 row) and `Hpersnonfoc`;
 - `greedy_uncorrelated_subset`.
 
 ## Differences from the old scripts
@@ -167,6 +170,8 @@ RGB values differ by more than 0.05.
 | Fig. 3 | `analyse_responseFrequencies.py` | per-simulation frequencies (`seeds=range(20)`): exact | reported only (0.33 %, strip-plot jitter) |
 | Fig. A3 | `analyse_responseFrequencies.py` | highlighted agents (from the script's printout): same | 0.1 % |
 | `polarisation_summary` | `analyse_responseFrequencies.py` | σ_foc, groupishness (mean, std), mean \|ω\|, mean ω: rtol 1e-12; `nr_negs` differs on purpose | — |
+| Fig. 5 | `analyse_BNmetrics.py` | mean, sd and n per metric × response × window (100 seeds): rtol 1e-12 | 0.1 % |
+| Fig. A4 | `analyse_BNmetrics.py` | correlation matrix (s = 0, three windows pooled): rtol 1e-12 | reported only (0.47 %, the title) |
 
 Fig. 3's strip plots jitter with the global NumPy RNG (seaborn has no RNG argument). The old script leaves it
 unseeded, and the package seeds it per figure and restores it afterwards, so a figure is the same on every run.
