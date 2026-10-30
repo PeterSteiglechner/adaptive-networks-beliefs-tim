@@ -4,9 +4,9 @@
 > so far: `index_folder`, the core (`Baseline`, selection, warnings, `Loader`, `FigureResult`, style) and `fig2`
 > with `example_agent_stats` / `focal_sign_counts`, `fig3` / `figA3` / `polarisation_summary`, and `fig4` / `fig5` /
 > `figA4` with their shared `metric_frame` (and `cohens_d` / `logit_fit` for Fig. 4), the tables `table3` /
-> `tableA5` / `tableA6` / `tableA7` with `save_table` and `greedy_uncorrelated_subset`, `fig6` / `figA7`, and
-> `figA8`. Update it as the tickets land. The old `analyse_*.py` scripts ([analysis.md](analysis.md)) stay
-> unchanged as the reference.
+> `tableA5` / `tableA6` / `tableA7` with `save_table` and `greedy_uncorrelated_subset`, `fig6` / `figA7`, `figA8`,
+> and `make_all` with its report and the CLI. Update it as the tickets land. The old `analyse_*.py` scripts
+> ([analysis.md](analysis.md)) stay unchanged as the reference.
 
 `anb.analysis` makes the paper's figures and tables from **whatever runs a folder holds**. It finds runs by
 parameter, not by a hard-coded filename. Each figure and table is its own function, and `make_all` runs all of
@@ -31,6 +31,7 @@ save_table(table3("simOut_old_model", s=4), "figs")                # → figs/ta
 
 ```bash
 python -m anb.analysis simOut_old_model figs --figs fig3,fig4 --formats png,pdf [--strict]
+python -m anb.analysis simOut_new_model figs_p02 --base link_prob=0.2 --mus 0 --no-tables
 ```
 
 ## How runs are found
@@ -103,9 +104,6 @@ seeded random agent of that type, with an `ExampleAgentFallback` warning (also a
 | `tableA6`, `tableA7` | as `fig4`; `tableA7` only at the pressures in `contrast2_pressures` | 100 | `mu=0.0`, `pressures=None` (paper rule), `seeds=None`; `tableA7` also `contrast2_pressures=(1, 2, 4)` |
 | `greedy_uncorrelated_subset` | as `figA4` | 100 | `mu=0.0`, `metrics` (the old nine candidates), `n=None` (all), `seeds=None` |
 
-In `make_all`, `fig2` is attempted for the adaptive, static-low and static-high configs (A1, A2). The `fig4` /
-`figA4` / `table*` family is attempted for each μ in `mus=(0.0, 0.005, 0.05)`, and `table3` for each s > 0 that
-exists.
 
 ## Output
 
@@ -116,7 +114,10 @@ A figure function returns a `FigureResult` with:
 - `name`: the file stem.
 
 Figure functions never save or print anything. Pass one `Loader()` to several figure functions (`loader=`) to
-read each request of a CSV only once, and a ready `index_folder(...)` (`index=`) to skip rescanning the folder.
+keep each CSV in memory, and a ready `index_folder(...)` (`index=`) to skip rescanning the folder. A loader holds one
+frame per CSV and cuts later requests from it; a request for rows or columns it doesn't hold reads the CSV again,
+for both (`Loader(whole=True)` reads everything the figures use at once, see `make_all`).
+
 `result.save(out_dir, formats=("png",))` creates `out_dir` and writes PNG at 600 dpi, plus a PDF if `"pdf"` is in
 `formats`.
 
@@ -142,9 +143,55 @@ and the base suffix (as for Fig. A4). The content and layout are the old script'
 
 Tables 3 and A5 are row fragments (no `tabular` environment), as the old output was.
 
-`make_all` returns `{item: [paths] | "skipped: <reason>" | "error: <message>"}` and prints a summary. An
-unexpected error in one item is warned about with its traceback and the run carries on. With `strict=True` it
-is raised instead.
+## `make_all` and the CLI
+
+```python
+make_all(sim_dir, out_dir, *, base=Baseline(), formats=("png",), figs=None, tables=True, mus=(0.0, 0.005, 0.05),
+         min_seeds=1, strict=False, loader=None, index=None) -> dict[str, list[Path] | str]
+```
+
+It indexes `sim_dir` once and attempts, for `base`, in this order:
+
+- `fig2` for the adaptive, static-low and static-high configs (Fig. 2, A1, A2), `fig3`, `figA3`;
+- `fig4`, `fig5` and `figA4` for each μ in `mus`;
+- `fig6`, `figA7`, `figA8`;
+- with `tables`: for each μ in `mus`, `table3` for each s > 0 that has at least `min_seeds` runs of the base at that
+  μ, then `tableA5`, `tableA6`, `tableA7`.
+
+Each item gets the defaults of its function (plus `min_seeds` where it takes one). Figures are saved in `formats`
+(then closed), tables to `out_dir/tables/`. The report maps each item's **key** to what happened:
+
+- the saved paths;
+- `"skipped: <reason>"`, the reason being the item's `FigureNotApplicable` message(s);
+- `"error: <type>: <message>"` for an unexpected exception. It is warned about with its traceback (a
+  **`FigureFailed`** `UserWarning`) and the other items still run. With `strict=True` it is raised instead.
+
+A key is the function name plus the arguments that tell the attempts apart: `fig2 config=staticlow`,
+`fig4 mu=0.005`, `table3 s=4 mu=0.0`, `fig3`. `figs` takes function names (`["fig4", "table3"]`) or keys
+(`["fig4 mu=0.005"]`) to restrict the run; an unknown one is a `ValueError`. The warnings the items emit are
+recorded for the report and emitted again, through your filters. The report is printed as a summary (one line per
+item, paths relative to `out_dir`); `format_report(report, out_dir)` gives that text.
+
+All items share one `Loader(whole=True)`: the first request of a CSV reads all its columns (ensemble runs at the
+rows the figures use, t = 95.5 / 100 / 145.5 / 195.5; detailed runs whole), and later requests are cut from it, so
+each CSV is read from disk once (`loader.reads` counts the reads per path). On `simOut_old_model` that's 4107 of
+its 8412 CSVs, held at once: the run takes about 50 s and peaks at about 1.9 GB. `make_all(..., loader=Loader())`
+holds only the rows and columns asked for (about 0.9 GB at the peak) but reads about 700 CSVs twice, when a later
+figure asks for more of them, in about the same time. Pass your own `loader=` / `index=` to share them with other
+calls. `tests/test_old_vs_new_make_all.py` (slow) runs it on `simOut_old_model` and checks that every paper figure and
+table is written, and that only Fig. A1/A2 (no detailed static runs) and Fig. A8 (no sensitivity runs) are skipped.
+
+`python -m anb.analysis SIM_DIR OUT_DIR` wraps `make_all` and prints the report. It exits with 1 if an item failed.
+
+| Option | `make_all` argument |
+|--------|---------------------|
+| `--figs fig3,fig4` | `figs` (comma-separated names or keys) |
+| `--formats png,pdf` | `formats` (default `png`) |
+| `--mus 0,0.005` | `mus` (default `0.0,0.005,0.05`) |
+| `--min-seeds N` | `min_seeds` (default 1) |
+| `--base FIELD=VALUE …` | `base`: the `Baseline` fields that differ from the paper's, e.g. `--base link_prob=0.2 M=15` |
+| `--no-tables` | `tables=False` |
+| `--strict` | `strict=True` |
 
 ## Summaries
 

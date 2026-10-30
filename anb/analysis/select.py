@@ -29,6 +29,10 @@ class ExampleAgentFallback(UserWarning):
     """A default example agent doesn't exist in the run (or has the wrong type) and a seeded random one is used."""
 
 
+class FigureFailed(UserWarning):
+    """An item of `make_all` raised an unexpected error (the message has the traceback); the others still run."""
+
+
 # The BN config fields and the paper's four configs (docu/analysis-package.md), keyed by their file-name token.
 CONFIG_FIELDS = ("init_w", "eps", "mu", "fixedBNat100")
 CONFIGS = {
