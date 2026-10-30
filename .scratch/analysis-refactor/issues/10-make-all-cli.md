@@ -4,7 +4,7 @@
 
 **What to build:** One call that makes everything applicable.
 
-- `make_all(sim_dir, out_dir, *, base=Baseline(), formats=("png",), figs=None, tables=True, mus=(0.0, 0.005, 0.05), min_seeds=1, strict=False)`:
+- `make_all(sim_dir, out_dir, *, base=PAPER, formats=("png",), figs=None, tables=True, mus=(0.0, 0.005, 0.05), min_seeds=1, strict=False)`:
   - indexes once and shares one loader;
   - attempts `fig2` for adaptive/static-low/static-high, `fig3`, `figA3`, and `fig4`/`fig5`/`figA4`/tables for each listed μ (`table3` for each s > 0 present), plus `fig6`, `figA7` and `figA8`;
   - saves the results and writes the tables.
