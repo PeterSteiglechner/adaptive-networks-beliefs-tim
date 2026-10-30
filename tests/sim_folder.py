@@ -7,6 +7,8 @@ What it holds (all on the paper's time structure, T = 200, pressure at t = 101�
 - one detailed run: adaptive, s = 4, seed 2 (Fig. 2's example simulation);
 - one M/N/τ variant (`VARIANT`: M = 6, N = 50, τ = 2), adaptive at s = 4: ensemble seeds {0, 1} and detailed seed 2;
 - one non-paper base (`link_prob 0.2`), adaptive at s = 4: ensemble seeds {0, 1} and detailed seed 2;
+- Fig. A8's single-parameter variants of the paper base (`SENSITIVITY`), staticlow, statichigh and adaptive at s = 4,
+  seed 0: the M row complete (M ∈ {5, 15}), the τ row only half (τ = 2, no τ = 10);
 - stray files that don't follow the naming scheme (`STRAY`).
 
 Run as a script (`python tests/sim_folder.py OUT_DIR`) to build it in a fresh interpreter, which `conftest.py`
@@ -33,6 +35,8 @@ GAPS = {("adaptive2static", 1): (), ("staticlow", 4): (0,)}  # (config, s) → t
 DETAILED = dict(config="adaptive", s=4, seed=2)
 VARIANT = dict(M=6, N=50, tau=2)
 OTHER_LINK_PROB = 0.2
+SENSITIVITY = (dict(M=5), dict(M=15), dict(tau=2))
+SENSITIVITY_CONFIGS = ("staticlow", "statichigh", "adaptive")
 STRAY = ("notes.csv", "detailed/sim_typo_fixedBNatt100.csv")
 
 
@@ -55,6 +59,9 @@ def build(out_dir) -> Path:
     for kwargs in (VARIANT, dict(link_prob=OTHER_LINK_PROB)):
         testbed("adaptive", 4, **kwargs).save_ensemble([0, 1], out_dir)
         testbed("adaptive", 4, **kwargs, detail=True).save_ensemble([2], out_dir)
+    for kwargs in SENSITIVITY:
+        for config in SENSITIVITY_CONFIGS:
+            testbed(config, 4, **kwargs).save_ensemble([0], out_dir)
     for name in STRAY:
         (out_dir / name).parent.mkdir(parents=True, exist_ok=True)
         (out_dir / name).write_text("t,id\n")

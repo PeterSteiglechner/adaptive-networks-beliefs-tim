@@ -3,8 +3,8 @@
 > **Status: in progress.** This describes the design agreed in `.scratch/analysis-refactor/spec.md`. Implemented
 > so far: `index_folder`, the core (`Baseline`, selection, warnings, `Loader`, `FigureResult`, style) and `fig2`
 > with `example_agent_stats` / `focal_sign_counts`, `fig3` / `figA3` / `polarisation_summary`, and `fig4` / `fig5` /
-> `figA4` with their shared `metric_frame` (and `cohens_d` / `logit_fit` for Fig. 4). Update it as the tickets
-> land. The old `analyse_*.py` scripts ([analysis.md](analysis.md)) stay unchanged as the reference.
+> `figA4` with their shared `metric_frame` (and `cohens_d` / `logit_fit` for Fig. 4), and `figA8`. Update it as the
+> tickets land. The old `analyse_*.py` scripts ([analysis.md](analysis.md)) stay unchanged as the reference.
 
 `anb.analysis` makes the paper's figures and tables from **whatever runs a folder holds**. It finds runs by
 parameter, not by a hard-coded filename. Each figure and table is its own function, and `make_all` runs all of
@@ -71,8 +71,9 @@ The package writes the `_M{M:.2f}`, `_N{N:.2f}` and `_tau{tau:.2f}` suffixes onl
   `None`, and the message names the missing cells.
 - **`FewSeedsWarning`** (a `UserWarning`): a required cell has fewer seeds than the paper used. The figure is
   still made. With fewer than `min_seeds` (default 1), the figure is not applicable.
-- If a figure needs a fixed grid (configs, pressure panels, sensitivity rows), every cell of the grid must be
-  there.
+- If a figure needs a fixed grid (configs, pressure panels), every cell of the grid must be there. Fig. A8 is the
+  exception: it needs its base cells, and a sensitivity row with a variant missing is left out of the grid with a
+  **`MissingLevelsWarning`** naming the missing cells (not applicable if no row is complete).
 - Pressure levels inside a panel (an x-axis, bars) use the paper's levels that exist. The missing ones get a
   **`MissingLevelsWarning`** (a `UserWarning`), and if none exist, the figure is not applicable. For Fig. 3 and
   the polarisation summary a level counts only if all four configs have it.
@@ -94,7 +95,7 @@ seeded random agent of that type, with an `ExampleAgentFallback` warning (also a
 | `figA4` | ensemble at `mu` (replacing the base's μ): s = 0 (μ = 0) or s = 4 (μ > 0) | 100 | `mu=0.0`, `seeds=None` |
 | `fig6` | ensemble adaptive, s = 4, at least two μ values, plus the example μ values for A/B | 100 | `mus=None` (all present), `example_seed=1`, `example_mus=(0.005, 0.2)`, `agent_rng_seed=42` |
 | `figA7` | ensemble adaptive, s = 4, each listed μ for `seed` | 1 | `seed=99`, `s=4`, `mus=(0, 0.005, 0.2)` |
-| `figA8` | ensemble s = 4: the base, plus each OFAT row (`M, N, beta, p, tau, eps, init_w`) for its configs | 100 | `rows=None` (all) |
+| `figA8` | ensemble s = 4: the base of staticlow, statichigh and adaptive (those the rows use), plus each complete OFAT row: M ∈ {5, 15}, N ∈ {50, 200} with p = 10/N, β ∈ {1.5, 6}, p ∈ {0.05, 0.2}, τ ∈ {2, 10} for the three configs, ε ∈ {0.5, 2} and ω₀ ∈ {0.1, 0.4} for adaptive | 100 | `rows=None` (all, in that order), `seeds=None` |
 | `table3` (Table 3, A1–A4) | ensemble adaptive at `mu` and `s` | 100 | `s`, `mu=0.0` |
 | `tableA5` | ensemble adaptive: s = 4 and s = 0 | 100 | `mu=0.0` |
 | `tableA6`, `tableA7` | as `fig4` | 100 | `mu=0.0` |
@@ -117,7 +118,7 @@ read each request of a CSV only once, and a ready `index_folder(...)` (`index=`)
 `formats`.
 
 Names are the old scripts' names (`fig2_adaptive_t100`, `fig3_responseFrequencies`, `fig4_mu0.0`,
-`fig5_metricChange_mu0.0`, `fig6_socialAdaptation`, `AppendixFig_…`). A base that differs from the paper's
+`fig5_metricChange_mu0.0`, `fig6_socialAdaptation`, `AppendixFig_…`, e.g. `AppendixFig_ofat` for Fig. A8). A base that differs from the paper's
 baseline appends the differing fields as legacy tokens (`_link_prob0.20`, `_M15.00`), so variants don't
 overwrite the paper figures. `fig5` at an `s` other than 4 appends `_s{s}`.
 
@@ -164,6 +165,14 @@ counts `latecompliant`, Fig. 6 doesn't).
 One deliberate change: figures use every seed they find, so Fig. 3 on a 100-seed folder uses 100 seeds instead
 of the old script's 20. Pass `seeds=range(20)` to reproduce the old Fig. 3.
 
+Fig. A8 finds its variants through the index, so the `_M`/`_N`/`_tau` runs the package writes are found (legacy runs
+need the suffixes added by hand, known issue #4) and the old `_fixedBNatt100` typo doesn't apply. Two small
+differences in the drawing: each row's middle value is the base's runs drawn once (the old script read the ε = 1 and
+ω₀ = 0.2 runs twice, as a variant and as the base, so those dots were doubled; the medians are the same), and an
+undrawn row leaves its panels empty, the panel letters running on over the drawn ones. The p row shows p·N with the N
+of each run (from its distinct `id`s). The variant values are absolute, so for a non-paper base a variant equal to the
+base is dropped.
+
 ### Checking against the old scripts
 
 `pytest -m slow tests/test_old_vs_new_*.py` runs the unchanged `analyse_*.py` scripts on `simOut_old_model` and
@@ -183,6 +192,7 @@ RGB values differ by more than 0.05.
 | Fig. 5 | `analyse_BNmetrics.py` | mean, sd and n per metric × response × window (100 seeds): rtol 1e-12 | 0.1 % |
 | Fig. A4 | `analyse_BNmetrics.py` | correlation matrix (s = 0, three windows pooled): rtol 1e-12 | reported only (0.47 %, the title) |
 | Fig. 4 | `analyse_BNmetrics.py` | Cohen's d (rtol 1e-10), logit coefficients and CIs of the five predictors (rtol 1e-6), per contrast × s | 0.1 % (0 %) |
+| Fig. A8 | `analyse_sensitivity.py` | per-simulation frequencies per row × config × value (100 seeds): exact. `simOut_old_model` has no sensitivity runs, so that test skips, and a stand-in folder (every name the script reads linked to a baseline run of its config, each name at a different seed) is compared instead | reported only (1.2 %, jitter and the doubled dots) |
 
 Fig. 3's strip plots jitter with the global NumPy RNG (seaborn has no RNG argument). The old script leaves it
 unseeded, and the package seeds it per figure and restores it afterwards, so a figure is the same on every run.
