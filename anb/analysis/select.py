@@ -16,6 +16,10 @@ class FewSeedsWarning(UserWarning):
     """A figure is made from fewer seeds than the paper used for at least one of its cells."""
 
 
+class MissingLevelsWarning(UserWarning):
+    """Some of the paper's levels (pressures, μ values) inside a panel have no runs; the figure uses the others."""
+
+
 class ExampleAgentFallback(UserWarning):
     """A default example agent doesn't exist in the run (or has the wrong type) and a seeded random one is used."""
 

@@ -10,10 +10,16 @@
 
 **Blocked by:** #03
 
-**Status:** open
+**Status:** done
 
-- [ ] On the fixture: a missing config gives `FigureNotApplicable`, a missing pressure level gives a warning while the figure still renders, and few seeds give `FewSeedsWarning`
-- [ ] Slow: with `seeds=range(20)` on `simOut_old_model`, the Fig. 3 frequencies match the old `res` exactly
-- [ ] Slow: Fig. A3 picks the same agents as the old script (same highlighted ids)
-- [ ] Slow: the summary numbers match the old summary cells (except `nr_negs`, which is documented)
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] On the fixture: a missing config gives `FigureNotApplicable`, a missing pressure level gives a warning while the figure still renders, and few seeds give `FewSeedsWarning`
+- [x] Slow: with `seeds=range(20)` on `simOut_old_model`, the Fig. 3 frequencies match the old `res` exactly
+- [x] Slow: Fig. A3 picks the same agents as the old script (same highlighted ids)
+- [x] Slow: the summary numbers match the old summary cells (except `nr_negs`, which is documented)
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+
+Notes: `anb/analysis/responses.py`. Missing pressure levels warn with a new `MissingLevelsWarning` (in `select`,
+for later tickets too). A level counts only if all four configs have at least `min_seeds` runs there. The
+polarisation summary uses all paper pressures s ≥ 0, like the old summary cells. Fig. 3A's example agents are
+checked against their type and fall back (`ExampleAgentFallback`). Fig. 3's jitter is seeded and restored. Slow
+test: `tests/test_old_vs_new_fig3.py`.

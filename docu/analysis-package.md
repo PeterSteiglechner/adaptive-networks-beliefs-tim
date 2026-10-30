@@ -2,7 +2,7 @@
 
 > **Status: in progress.** This describes the design agreed in `.scratch/analysis-refactor/spec.md`. Implemented
 > so far: `index_folder`, the core (`Baseline`, selection, warnings, `Loader`, `FigureResult`, style) and `fig2`
-> with `example_agent_stats` / `focal_sign_counts`. Update it as the tickets land. The old `analyse_*.py`
+> with `example_agent_stats` / `focal_sign_counts`, and `fig3` / `figA3` / `polarisation_summary`. Update it as the tickets land. The old `analyse_*.py`
 > scripts ([analysis.md](analysis.md)) stay unchanged as the reference.
 
 `anb.analysis` makes the paper's figures and tables from **whatever runs a folder holds**. It finds runs by
@@ -72,8 +72,9 @@ The package writes the `_M{M:.2f}`, `_N{N:.2f}` and `_tau{tau:.2f}` suffixes onl
   still made. With fewer than `min_seeds` (default 1), the figure is not applicable.
 - If a figure needs a fixed grid (configs, pressure panels, sensitivity rows), every cell of the grid must be
   there.
-- Pressure levels inside a panel (an x-axis, bars) use the paper's levels that exist. The missing ones are
-  warned about, and if none exist, the figure is not applicable.
+- Pressure levels inside a panel (an x-axis, bars) use the paper's levels that exist. The missing ones get a
+  **`MissingLevelsWarning`** (a `UserWarning`), and if none exist, the figure is not applicable. For Fig. 3 and
+  the polarisation summary a level counts only if all four configs have it.
 
 Default example agents that are missing, or that don't have the intended response type, are replaced by a
 seeded random agent of that type, with an `ExampleAgentFallback` warning (also a `UserWarning`).
@@ -81,7 +82,8 @@ seeded random agent of that type, with an `ExampleAgentFallback` warning (also a
 | Item | Needs (on top of the base) | Paper seeds | Kwargs (defaults) |
 |------|----------------------------|-------------|-------------------|
 | `fig2` (Fig. 2, A1, A2) | detailed run, BN config, `s`, `seed` | 1 | `config="adaptive"`, `seed=2`, `s=4`, `agents=(61, 79)` |
-| `fig3` | ensemble: all 4 configs × s > 0 levels, plus a detailed adaptive run for panel A | 100 (old script: 20) | `seeds=None`, `example_seed=1`, `example_s=4`, `example_agents={resistant: 4, resilient: 53, compliant: 16}` |
+| `fig3` | ensemble: all 4 configs × s > 0 levels, plus a detailed adaptive run for panel A | 100 (old script: 20) | `seeds=None`, `example_seed=1`, `example_s=4`, `example_agents={resistant: 4, resilient: 53, compliant: 16}`, `denominator` (the four types incl. `latecompliant`) |
+| `polarisation_summary` | ensemble: all 4 configs × s ≥ 0 levels | 100 (old script: 20) | `seeds=None` |
 | `figA3` | detailed adaptive run for each s ∈ {0, 1, 2, 4, 8, 16} | 1 | `seed=1`, `rng_seed=14` |
 | `fig4` (Fig. 4, A5, A6) | ensemble adaptive at `mu`: s > 0 levels for μ = 0, s = 4 for μ > 0 | 100 | `mu=0.0`, `contrast2_pressures=(1, 2, 4)` |
 | `fig5` | ensemble adaptive at `mu`: s = 4 and the s = 0 reference | 100 | `mu=0.0`, `s=4` |
@@ -125,7 +127,9 @@ is raised instead.
 
 These functions return DataFrames:
 
-- `polarisation_summary`: σ_foc and mean |ω| per config;
+- `polarisation_summary`: per config, the mean and std over runs (all paper pressures s ≥ 0 that all four configs
+  have) of `std_focal` (σ_foc at t = 100), `abs_edge` / `mean_edge` (mean |ω| / mean ω at t = 100),
+  `groupishness` and `nr_negs`. Columns are `(metric, "mean" | "std")` plus `("n_runs", "")`;
 - `example_agent_stats`: the `tb_tot`, `tb_foc` and `Hpers` of the Fig. 2 agents at t = 100;
 - `focal_sign_counts`;
 - `greedy_uncorrelated_subset`.
@@ -160,3 +164,9 @@ RGB values differ by more than 0.05.
 | Figure | Old script | Compared | PNG threshold (measured) |
 |---|---|---|---|
 | Fig. 2 | `analyse_timeseries.py` | focal trajectories, example BNs, `example_agent_stats`, `focal_sign_counts`: exact | 0.1 % (0.004 %) |
+| Fig. 3 | `analyse_responseFrequencies.py` | per-simulation frequencies (`seeds=range(20)`): exact | reported only (0.33 %, strip-plot jitter) |
+| Fig. A3 | `analyse_responseFrequencies.py` | highlighted agents (from the script's printout): same | 0.1 % |
+| `polarisation_summary` | `analyse_responseFrequencies.py` | σ_foc, groupishness (mean, std), mean \|ω\|, mean ω: rtol 1e-12; `nr_negs` differs on purpose | — |
+
+Fig. 3's strip plots jitter with the global NumPy RNG (seaborn has no RNG argument). The old script leaves it
+unseeded, and the package seeds it per figure and restores it afterwards, so a figure is the same on every run.

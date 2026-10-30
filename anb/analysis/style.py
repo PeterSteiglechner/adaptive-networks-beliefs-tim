@@ -25,9 +25,9 @@ RC = {
 
 
 @contextmanager
-def figure_style():
-    """The paper's rc settings, with pyplot's interactive mode off so a figure function shows nothing."""
-    with mpl.rc_context(RC), plt.ioff():
+def figure_style(rc=RC):
+    """`rc` (the paper's settings by default), with pyplot's interactive mode off so a figure function shows nothing."""
+    with mpl.rc_context(rc), plt.ioff():
         yield
 
 
@@ -45,6 +45,17 @@ EDGE_CMAP = mpl.colors.LinearSegmentedColormap.from_list(
 EDGE_NORM = mpl.colors.Normalize(vmin=-1, vmax=1)
 BELIEF_CMAP = mpl.colormaps["coolwarm"]
 BELIEF_NORM = mpl.colors.Normalize(vmin=-1, vmax=1)
+
+# Response types (`analyse_responseFrequencies.py`'s `cmap`); `NA` is an agent without a type.
+RESPONSE_COLORS = {
+    "persistPos": "#4CAF50",
+    "nonpersistPos": "#AED581",
+    "compliant": "#2196F3",
+    "resilient": "#9C27B0",
+    "resistant": "#F44336",
+    "latecompliant": "#90CAF9",
+    "NA": "#9E9E9E",
+}
 
 EXAMPLE_AGENT_COLORS = ("#27ae60", "#9b59b6")  # Fig. 2's two highlighted agents
 PRESSURE_WINDOW = (101, 150)
