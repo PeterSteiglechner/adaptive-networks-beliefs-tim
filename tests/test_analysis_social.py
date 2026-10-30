@@ -5,8 +5,6 @@ only, `sim_folder.SOCIAL`); the M/N/τ variant has μ = 0 (seeds {0, 1}) and μ 
 example simulations are therefore passed as seed 1 (the paper's Fig. A7 uses seed 99).
 """
 
-import warnings
-
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -17,6 +15,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 import sim_folder  # noqa: E402
+from analysis_helpers import expected_warnings  # noqa: E402
 from anb.analysis import (  # noqa: E402
     Baseline, FewSeedsWarning, FigureNotApplicable, FigureResult, MissingLevelsWarning, fig6, figA7,
 )
@@ -27,14 +26,6 @@ SEED = sim_folder.SOCIAL["seed"]
 MUS = (0.0, *sim_folder.SOCIAL["mus"])  # the paper base's μ values at s = 4
 VARIANT = Baseline(**sim_folder.VARIANT)
 PLOTTED = ["compliant", "resilient", "resistant"]
-
-
-def expected_warnings(func, *args, **kwargs):
-    """`func(...)` and the categories it warned with (the stray-file warning of the index left out)."""
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        result = func(*args, **kwargs)
-    return result, {w.category for w in caught if "legacy naming scheme" not in str(w.message)}
 
 
 def adaptive_stem(mu, seed, s=4, **sizes) -> str:

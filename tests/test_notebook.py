@@ -18,12 +18,12 @@ TESTBED_NOTEBOOK = NOTEBOOK.with_name("testbed.ipynb")
 ANALYSIS_NOTEBOOK = NOTEBOOK.with_name("analysis.ipynb")
 
 
-def cells(notebook=NOTEBOOK):
+def code_cells(notebook=NOTEBOOK):
     return [cell for cell in json.loads(notebook.read_text())["cells"] if cell["cell_type"] == "code"]
 
 
-def code_cells(notebook=NOTEBOOK):
-    return ["".join(cell["source"]) for cell in cells(notebook)]
+def code_sources(notebook=NOTEBOOK):
+    return ["".join(cell["source"]) for cell in code_cells(notebook)]
 
 
 def run_as_script(sources, cwd: Path) -> subprocess.CompletedProcess:
@@ -37,30 +37,32 @@ def run_as_script(sources, cwd: Path) -> subprocess.CompletedProcess:
 
 @pytest.mark.parametrize("notebook", [NOTEBOOK, ANALYSIS_NOTEBOOK], ids=lambda path: path.stem)
 def test_notebook_has_no_magics_so_it_runs_as_a_plain_script(notebook):
-    assert all(not line.lstrip().startswith(("%", "!")) for cell in code_cells(notebook) for line in cell.splitlines())
+    assert all(not line.lstrip().startswith(("%", "!"))
+               for source in code_sources(notebook) for line in source.splitlines())
 
 
 def test_testbed_notebook_compiles_as_a_plain_script():
-    compile("\n\n".join(code_cells(TESTBED_NOTEBOOK)), str(TESTBED_NOTEBOOK), "exec")
+    compile("\n\n".join(code_sources(TESTBED_NOTEBOOK)), str(TESTBED_NOTEBOOK), "exec")
 
 
 @pytest.mark.slow
 def test_notebook_runs_top_to_bottom_in_a_fresh_interpreter(tmp_path):
-    proc = run_as_script(code_cells(), tmp_path)
+    proc = run_as_script(code_sources(), tmp_path)
     assert proc.returncode == 0, proc.stderr
 
 
 def test_analysis_notebook_is_committed_with_outputs_cleared():
-    assert all(cell["outputs"] == [] and cell["execution_count"] is None for cell in cells(ANALYSIS_NOTEBOOK))
+    assert all(cell["outputs"] == [] and cell["execution_count"] is None for cell in code_cells(ANALYSIS_NOTEBOOK))
 
 
 def test_analysis_notebook_runs_top_to_bottom_on_the_synthetic_folder(sim_dir, tmp_path):
     # The cell tagged `parameters` sets the folders; an injected cell right after it points them at the fixture
     # (as papermill would), so the notebook's own defaults still run.
-    tagged = [k for k, cell in enumerate(cells(ANALYSIS_NOTEBOOK)) if "parameters" in cell["metadata"].get("tags", [])]
+    tagged = [k for k, cell in enumerate(code_cells(ANALYSIS_NOTEBOOK))
+              if "parameters" in cell["metadata"].get("tags", [])]
     assert len(tagged) == 1
     out_dir = tmp_path / "figs"
-    sources = code_cells(ANALYSIS_NOTEBOOK)
+    sources = code_sources(ANALYSIS_NOTEBOOK)
     sources.insert(tagged[0] + 1, f"SIM_DIR = Path({str(sim_dir)!r})\nOUT_DIR = Path({str(out_dir)!r})")
 
     proc = run_as_script(sources, tmp_path)

@@ -4,8 +4,6 @@ The fixture's paper base has the adaptive config at s ∈ {0, 1, 4} × seeds {0,
 at s = 4 for seed 1 only. The `link_prob 0.2` base has adaptive at s = 4 only, so it lacks the s = 0 reference.
 """
 
-import warnings
-
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -15,6 +13,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 import sim_folder  # noqa: E402
+from analysis_helpers import expected_warnings  # noqa: E402
 from anb.analysis import (  # noqa: E402
     PAPER, Baseline, FewSeedsWarning, FigureNotApplicable, FigureResult, FitWarning, Loader, MissingLevelsWarning,
     cohens_d, fig4, fig5, figA4, index_folder, logit_fit, metric_frame, runs,
@@ -23,14 +22,6 @@ from anb.analysis.bnmetrics import CONTROL, METRICS, NEGATIVE, PREDICTORS, WINDO
 from anb.io import legacy_filename  # noqa: E402
 
 RESPONSE_COLUMNS = ["persistPos", "nonpersistPos", "compliant", "resilient", "resistant", "latecompliant"]
-
-
-def expected_warnings(func, *args, **kwargs):
-    """`func(...)` and the categories it warned with (the stray-file warning of the index left out)."""
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        result = func(*args, **kwargs)
-    return result, {w.category for w in caught if "legacy naming scheme" not in str(w.message)}
 
 
 def adaptive_csv(sim_dir, s, seed) -> pd.DataFrame:

@@ -125,9 +125,9 @@ for both (`Loader(whole=True)` reads everything the figures use at once, see `ma
 `formats`.
 
 Names are the old scripts' names (`fig2_adaptive_t100`, `fig3_responseFrequencies`, `fig4_mu0.0`,
-`fig5_metricChange_mu0.0`, `fig6_socialAdaptation`, `AppendixFig_…`, e.g. `AppendixFig_ofat` for Fig. A8). A base that differs from the paper's
-baseline appends the differing fields as legacy tokens (`_link_prob0.20`, `_M15.00`), so variants don't
-overwrite the paper figures. `fig5` at an `s` other than 4 appends `_s{s}`.
+`fig5_metricChange_mu0.0`, `fig6_socialAdaptation`, `AppendixFig_…`, e.g. `AppendixFig_ofat` for Fig. A8). A base
+that differs from the paper's baseline appends the differing fields as legacy tokens (`_link_prob0.20`, `_M15.00`),
+so variants don't overwrite the paper figures. `fig5` at an `s` other than 4 appends `_s{s}`.
 
 A table function returns its LaTeX as a `LatexTable`, a `str` that also carries the file stem in `.name`, and
 prints nothing. `save_table(latex, out_dir, name=None)` writes it to `out_dir/tables/<name>.tex` (creating the

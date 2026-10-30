@@ -4,8 +4,6 @@ The fixture has s ∈ {0, 1, 4} × seeds {0, 1, 2} for the four configs, no `ada
 of `staticlow` at s = 4, so Fig. 3 has one complete pressure level (s = 4). Its one detailed run is seed 2.
 """
 
-import warnings
-
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -16,6 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 import sim_folder  # noqa: E402
+from analysis_helpers import expected_warnings  # noqa: E402
 from anb.analysis import (  # noqa: E402
     Baseline, ExampleAgentFallback, FewSeedsWarning, FigureNotApplicable, FigureResult, MissingLevelsWarning,
     fig3, figA3, polarisation_summary,
@@ -24,14 +23,6 @@ from anb.io import legacy_filename  # noqa: E402
 
 RESPONSES = ["compliant", "resilient", "resistant", "latecompliant"]
 EXAMPLE = dict(example_seed=sim_folder.DETAILED["seed"])  # the fixture's detailed run is seed 2, not the paper's 1
-
-
-def expected_warnings(func, *args, **kwargs):
-    """`func(...)` and the categories it warned with (the stray-file warning of the index left out)."""
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        result = func(*args, **kwargs)
-    return result, {w.category for w in caught if "legacy naming scheme" not in str(w.message)}
 
 
 def ensemble_csv(sim_dir, config, s, seed, link_prob=0.1) -> pd.DataFrame:
