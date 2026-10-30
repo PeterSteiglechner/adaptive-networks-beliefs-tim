@@ -63,8 +63,9 @@ def _present_mus(index, base: Baseline, levels, *, item, seeds, min_seeds) -> tu
     return present
 
 
-def _is_among(mu, levels) -> bool:
-    return bool(np.isclose(levels, mu, rtol=0, atol=1e-9).any())
+def _matching(mu, levels):
+    """The value among `levels` within 1e-9 of `mu`, or `None`."""
+    return next((level for level in levels if np.isclose(level, mu, rtol=0, atol=1e-9)), None)
 
 
 def fig6(sim_dir, *, base: Baseline = PAPER, mus=None, example_seed=1, example_mus=(0.005, 0.2), agent_rng_seed=42,
@@ -77,9 +78,10 @@ def fig6(sim_dir, *, base: Baseline = PAPER, mus=None, example_seed=1, example_m
     and the metrics `FIG6_METRICS` (per agent, 95.5 row), each z-scored over everything plotted, mean ± sd per μ.
     D: the relative response frequencies per run, counted over `denominator` (default compliant, resilient and
     resistant, as in the paper; it may add latecompliant). A/B: the BNs at t = 100 of `N_EXAMPLES` agents in the
-    run `example_seed` at each of the two `example_mus`, which must be among the `mus` and have that run. The agents
-    are `RandomState(agent_rng_seed).randint(N)` draws (42 picks the paper's); the strip-plot jitter continues
-    that RNG, as the old script's global one did. The global RNG is left as it was. `mu` replaces the base's μ.
+    run `example_seed` at each of the two `example_mus`, which must be among the plotted μ values (else
+    `FigureNotApplicable`) and have that run. The agents are `RandomState(agent_rng_seed).randint(N)` draws (42
+    picks the paper's); the strip-plot jitter continues that RNG, as the old script's global one did. The global RNG
+    is left as it was. Each μ plotted replaces the base's μ.
 
     `data` (`DATA_COLUMNS`): panel, quantity, mu, seed, id, response, value, z. Panel C has quantity "H" (one row
     per run, no id) and each metric (one row per agent), with the z-score; D has "frequency" (per run × response);
@@ -88,13 +90,19 @@ def fig6(sim_dir, *, base: Baseline = PAPER, mus=None, example_seed=1, example_m
     if not set(PLOTTED) <= set(denominator) <= set(RESPONSES):
         raise ValueError(f"denominator must hold {', '.join(PLOTTED)} and may add latecompliant, got {denominator}")
     levels = PAPER_MUS if mus is None else tuple(float(mu) for mu in mus)
-    example_mus = tuple(float(mu) for mu in example_mus)
-    if len(example_mus) != 2 or not all(_is_among(mu, levels) for mu in example_mus):
-        raise ValueError(f"example_mus must be two of the μ values plotted ({levels}), got {example_mus}")
+    requested = tuple(float(mu) for mu in example_mus)
+    example_mus = tuple(_matching(mu, levels) for mu in requested)  # as the `levels` write them
+    if len(example_mus) != 2 or None in example_mus:
+        raise ValueError(f"example_mus must be two of the μ values plotted ({levels}), got {requested}")
     index = index_folder(sim_dir) if index is None else index
     loader = loader or Loader()
     present = _present_mus(index, base, levels, item="fig6", seeds=seeds, min_seeds=min_seeds)
     if present is None:
+        return None
+    if dropped := [mu for mu in example_mus if mu not in present]:
+        warnings.warn(f"fig6 not applicable: example μ = {', '.join(f'{mu:g}' for mu in dropped)} isn't among the "
+                      f"plotted μ values ({', '.join(f'{mu:g}' for mu in present)})", FigureNotApplicable,
+                      stacklevel=2)
         return None
     example_cells = [Cell(f"μ={mu:g} s={PAPER_S} seed={example_seed}", replace(base, mu=mu), PAPER_S,
                           seeds=(example_seed,)) for mu in example_mus]
