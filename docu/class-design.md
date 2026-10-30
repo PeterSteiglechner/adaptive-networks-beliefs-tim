@@ -162,6 +162,8 @@ classDiagram
         class io {
             <<module>>
             +legacy_filename(params, detail)$ str
+            +parse_filename(name)$ tuple
+            +is_detailed(name)$ bool
         }
     }
 
@@ -345,7 +347,7 @@ pass. The helpers are not part of the class hierarchy.
 
 | Function | Responsibility |
 |----------|----------------|
-| `legacy_filename(params, detail)` | Reproduces `run_one`'s filename exactly, so the `analyse_*.py` scripts find new runs (Q15). Reads `lam` and `n_events` from `params`. Shown as a `<<module>>` box in the diagram because it is a function, not a class |
+| `legacy_filename(params, detail)` | Reproduces `run_one`'s filename exactly, so the `analyse_*.py` scripts find new runs (Q15). Reads `lam`, `n_events` and the optional `M`, `N`, `tau` from `params`; a non-default M, N or τ adds the `_M`/`_N`/`_tau` suffix (known issue #4). `parse_filename(name)` is its inverse, `is_detailed(name)` tells detailed runs apart. Shown as a `<<module>>` box in the diagram because it is a function, not a class |
 
 ## Sequence of one run
 

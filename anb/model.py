@@ -50,7 +50,8 @@ class ModelSpec:
         """Output-column parameters: scalars for uniform parameters, `(N,)` arrays for per-agent ones.
 
         `fixedBNat100` is true only for `learning_until = 101`, the gate legacy's flag means. Any other gate
-        gets its own `learning_until` column, and a `fixed` mask a per-agent `fixed` column.
+        gets its own `learning_until` column, and a `fixed` mask a per-agent `fixed` column. `M`, `N` and `tau`
+        (beliefs, agents, memory length) go only into the legacy filename, as `parameter_columns` leaves them out.
         """
         out = dict(self.network_kwargs)
         for name in PER_AGENT_PARAMS:
@@ -63,4 +64,5 @@ class ModelSpec:
             out["learning_until"] = learning_until
         if self.agent.fixed is not None:
             out["fixed"] = np.asarray(self.agent.fixed)
+        out.update(M=self.agent.n_beliefs, N=self.n_agents, tau=self.agent.tau)
         return out

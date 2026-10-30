@@ -96,6 +96,7 @@ A file carries its triage label on a `**Labels:**` line (e.g. `ready-for-agent`)
 because several quirks are needed to reproduce the paper:
 - `Hsoc` uses the neighbours' mean focal belief, while the dynamics use the sum.
 - There are two inconsistent `fixedBNat100` gates (the module-level flag and the per-run param).
-- `run_one` never adds the `_M`/`_N`/`_tau` filename suffixes that `analyse_sensitivity.py` expects.
+- `run_one` never adds the `_M`/`_N`/`_tau` filename suffixes that `analyse_sensitivity.py` expects (the `anb`
+  package does).
 - `if True:` in `run_one` always overwrites existing CSVs.
 - `tau` must be an int.

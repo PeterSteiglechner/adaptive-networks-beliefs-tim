@@ -15,7 +15,7 @@ Issues are ordered by impact:
 | 1 | `Hsoc` metric uses the neighbour mean, the model uses the sum | Results | `ANBmodel.py:233` |
 | 2 | In-place shuffle of module-level lists carries state between runs | Reproducibility | `ANBmodel.py:179`, `:439` |
 | 3 | README run table doesn't match what the scripts read | Breaks the pipeline | `README.md`, analysis scripts |
-| 4 | Sensitivity analysis expects filename suffixes the model never writes | Breaks the pipeline | `ANBmodel.py:498–521`, `analyse_sensitivity.py:114–124` |
+| 4 | Sensitivity analysis expects filename suffixes the model never writes (fixed in `anb`, open in legacy) | Breaks the pipeline | `ANBmodel.py:498–521`, `analyse_sensitivity.py:114–124` |
 | 5 | ~~`scikit-learn` / `statsmodels` missing from dependencies~~ (fixed) | Breaks the pipeline | `pyproject.toml`, `analyse_BNmetrics.py:443–444` |
 | 6 | `analyse_BNmetrics.py` saves into `figs/` before creating it | Breaks the pipeline | `analyse_BNmetrics.py:388`, `:791` |
 | 7 | `detail` / `track_times` exist only under `__main__` | Breaks the pipeline | `ANBmodel.py:331`, `:467`, `:573–584` |
@@ -147,6 +147,13 @@ fname += f"_tau{tau:.2f}" if tau != 1 else ""
 ```
 
 A better long-term fix is to pass `M`, `N` and `tau` as run parameters instead of editing module constants.
+
+**Status.** Fixed in the `anb` package, still open in legacy (`ANBmodel.py` stays frozen). `anb.io.legacy_filename`
+writes `_M{M:.2f}`, `_N{N:.2f}` and `_tau{tau:.2f}`, each only when it differs from 10/100/1, right after the
+`seed` token and before `_2events`/`_lambda`, which is the order `analyse_sensitivity.py` reads.
+`SimulationResult.save` and `Testbed.output_path` take M, N and τ from the spec, so an M/N/τ variant can't
+overwrite a baseline run. Baseline names don't change. `anb.io.parse_filename` reads the suffixes back, with the
+defaults when they're absent. Legacy sensitivity runs still need the suffix added by hand.
 
 ---
 

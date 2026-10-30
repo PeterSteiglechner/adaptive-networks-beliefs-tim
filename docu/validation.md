@@ -129,7 +129,7 @@ two sets of runs are compared as samples, not seed by seed, because the RNG stre
 1). Files in one folder only, and paired files whose name isn't a legacy ensemble name (e.g. a run saved with
 `legacy_names=False`), are listed in `summary.md` and left out; the latter are never read. Each file name is
 parsed back into its parameters
-(`parse_filename`, the inverse of `legacy_filename`), so any sweep is covered without a config list. A cell is
+(`anb.io.parse_filename`, the inverse of `legacy_filename`), so any sweep is covered without a config list. A cell is
 labelled with its paper config name (`static0.2`, `static0.8`, `adaptive-static`, `adaptive`) when it matches one,
 otherwise with the parameters that differ from the adaptive config, e.g. `mu=0.1`.
 
@@ -307,6 +307,7 @@ and the metrics come to 36 ms, 28 % of the run in the ensemble. The rest of the 
 
 Unchanged on purpose, for comparability with the paper: `Hsoc` keeps the neighbours' mean (`SocialEnergy("sum")`
 gives the eq. 1 term, known issue #1), the response rules keep their zero and boundary handling (#9), and file
-names keep legacy's format without `_M`/`_N`/`_tau` suffixes (#4).
+names keep legacy's format. The one addition is the `_M`/`_N`/`_tau` suffixes for non-default M, N or τ (#4),
+which leaves every paper-setup name unchanged.
 
 **Sign-off:** ☐ RNG stream (1) ☐ single `fixedBNat100` meaning (2), supervisor, date: ________

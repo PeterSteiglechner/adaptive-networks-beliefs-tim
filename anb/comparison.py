@@ -36,7 +36,7 @@ from scipy import stats
 from statsmodels.stats.multitest import multipletests
 
 from anb.agents import ANBAgent, AgentState
-from anb.io import legacy_filename
+from anb.io import SIZE_DEFAULTS, is_detailed, legacy_filename, parse_filename
 from anb.metrics import RESPONSE_COLUMNS
 from anb.model import ANBModel, ModelSpec
 from anb.networks import ErdosRenyiNetwork
@@ -212,11 +212,6 @@ def metric_table(legacy: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
 
 # Folder comparison
 
-_FILENAME = re.compile(
-    r"sim_link_prob(?P<link_prob>[\d.]+)_init_w(?P<init_w>[\d.]+)_beta(?P<beta>[\d.]+)_rho(?P<rho>[\d.]+)"
-    r"_eps(?P<eps>[\d.]+)_mu(?P<mu>[\d.]+)(?P<fixed>_fixedBNat100)?_ext_strength(?P<ext_strength>[\d.]+)"
-    r"_seed(?P<seed>\d+)(?P<events>_2events)?(?:_lambda(?P<lam>[\d.]+))?")
-
 # The paper's BN configurations (init_w, eps, mu, fixedBNat100) at the paper's fixed parameters (legacy `__main__`).
 PAPER_CONFIGS = {
     "static0.2": (0.2, 0.0, 0.0, False),
@@ -226,7 +221,7 @@ PAPER_CONFIGS = {
 }
 PAPER_FIXED = dict(link_prob=0.1, beta=3.0, rho=1 / 3, lam=0.0)  # the paper's other parameters
 _BASELINE = dict(link_prob=0.1, init_w=0.2, beta=3.0, rho=0.33, eps=1.0, mu=0.0, fixedBNat100=False, lam=0.0,
-                 n_events=1)  # the adaptive paper config; a filename holds rho to two decimals
+                 n_events=1, **SIZE_DEFAULTS)  # the adaptive paper config; a filename holds rho to two decimals
 
 
 def paper_cell(config: str, **changes) -> dict:
@@ -254,27 +249,9 @@ def cell_testbed(cell: dict, pressure: float, n_agents: int = 100, **agent_chang
 SUMMARY_CELL_COLUMNS = ("config", "pressure", "mu", "seed")  # what a summary row carries from its file name
 
 
-def parse_filename(name: str) -> tuple[dict, int]:
-    """Inverse of `legacy_filename`: a file name (with or without `.csv`) → (cell parameters, seed).
-
-    The cell holds every parameter except the seed, as `legacy_filename` takes them. Values are as rounded in
-    the name (`rho = 0.33`).
-    """
-    match = _FILENAME.fullmatch(name.removesuffix(".csv"))
-    if match is None:
-        raise ValueError(f"not a legacy ensemble file name: {name}")
-    g = match.groupdict()
-    ext = float(g["ext_strength"])
-    cell = dict(link_prob=float(g["link_prob"]), init_w=float(g["init_w"]), beta=float(g["beta"]),
-                rho=float(g["rho"]), eps=float(g["eps"]), mu=float(g["mu"]), fixedBNat100=g["fixed"] is not None,
-                ext_strength=int(ext) if ext.is_integer() else ext, lam=float(g["lam"] or 0.0),
-                n_events=2 if g["events"] else 1)
-    return cell, int(g["seed"])
-
-
 def cell_label(cell: dict) -> str:
     """A paper config's name, else the parameters that differ from the adaptive config (the pressure doesn't count)."""
-    others = ("link_prob", "beta", "rho", "lam", "n_events")
+    others = ("link_prob", "beta", "rho", "lam", "n_events", *SIZE_DEFAULTS)
     if all(cell[k] == _BASELINE[k] for k in others):
         for name, values in PAPER_CONFIGS.items():
             if values == tuple(cell[k] for k in ("init_w", "eps", "mu", "fixedBNat100")):
@@ -312,7 +289,12 @@ def _stems(folder: Path) -> set[str]:
 
 
 def _parses(stem: str) -> bool:
-    return _FILENAME.fullmatch(stem) is not None
+    """Whether `stem` is a legacy ensemble name (a detailed run has no summary)."""
+    try:
+        parse_filename(stem)
+    except ValueError:
+        return False
+    return not is_detailed(stem)
 
 
 def _cell_name(stem: str) -> str:

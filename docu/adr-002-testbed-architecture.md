@@ -189,8 +189,11 @@ columns (per-agent ones joined on `id`). `save(directory, legacy_names=True)`.
 
 ### `anb/io.py`
 
-**`legacy_filename(params, detail) -> str`**: reproduces `run_one`'s naming exactly. `params` carries `lam` (from
-`Agent`) and `n_events` (from the schedule), so they are not separate arguments.
+**`legacy_filename(params, detail) -> str`**: reproduces `run_one`'s naming exactly for the paper's M, N and τ.
+`params` carries `lam` (from `Agent`), `n_events` (from the schedule) and `M`, `N`, `tau` (from the spec), so they
+are not separate arguments. A non-default M, N or τ adds the `_M`/`_N`/`_tau` suffix `analyse_sensitivity.py`
+expects (known issue #4). `parse_filename(name) -> (cell, seed)` is the inverse and `is_detailed(name)` tells
+detailed runs apart.
 
 ### `../notebooks/demo.ipynb`
 

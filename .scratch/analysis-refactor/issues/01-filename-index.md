@@ -12,11 +12,11 @@
 
 **Blocked by:** none
 
-**Status:** open
+**Status:** done
 
-- [ ] Round-trip tests `legacy_filename` → parser for the baseline, `fixedBNat100`, `_2events`, `_lambda`, each of M/N/τ, combinations, and detailed names
-- [ ] Every existing baseline filename is unchanged (existing `test_legacy_filename.py` passes as is)
-- [ ] The comparison module uses the moved parser, and its tests pass
-- [ ] `index_folder` on a synthetic folder returns the expected rows, and a stray file gives exactly one warning
-- [ ] `index_folder(simOut_old_model)` indexes all 8400 ensemble files plus the detailed ones (a manual check, noted in the ticket)
-- [ ] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass
+- [x] Round-trip tests `legacy_filename` → parser for the baseline, `fixedBNat100`, `_2events`, `_lambda`, each of M/N/τ, combinations, and detailed names
+- [x] Every existing baseline filename is unchanged (existing `test_legacy_filename.py` passes as is)
+- [x] The comparison module uses the moved parser, and its tests pass
+- [x] `index_folder` on a synthetic folder returns the expected rows, and a stray file gives exactly one warning
+- [x] `index_folder(simOut_old_model)` indexes all 8400 ensemble files plus the detailed ones (a manual check, noted in the ticket: 2026-10-30, 8412 rows = 8400 ensemble + 12 detailed, all M 10 / N 100 / τ 1, no warning)
+- [x] `pytest` and `NUMBA_DISABLE_JIT=1 pytest` pass

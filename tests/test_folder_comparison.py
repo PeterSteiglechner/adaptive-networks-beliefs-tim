@@ -57,6 +57,7 @@ SHIFTED = np.array([0.55, 0.0, 0.0, 0.0, 0.0, 0.0, 0.45])
     (dict(mu=0.1), "mu=0.1"),
     (dict(mu=0.001, eps=0.5), "eps=0.5, mu=0.001"),
     (dict(n_events=2), "n_events=2"),
+    (dict(N=50), "N=50"),
 ])
 def test_filenames_round_trip_into_labelled_cells(changes, expected):
     p = params(**changes)

@@ -57,9 +57,10 @@ def test_the_ablation_is_saved_under_the_adaptive_static_names_and_pairs_with_it
 
 def test_the_report_script_runs_the_ablation_and_rerun_cells_into_their_own_folders(tmp_path):
     old, new, out, rerun_old = (tmp_path / name for name in ("old", "new", "out", "rerun_old"))
-    for pressure in (0, 1, 2, 4, 8, 16):  # stand-in legacy folders: cheap runs under the names the cells pair with
-        make_testbed(101, strength=pressure, mu=0.0).save_ensemble(range(2), old)
-        make_testbed(None, strength=pressure, mu=0.1).save_ensemble(range(2), rerun_old)
+    # stand-in legacy folders: cheap N-agent runs under the 100-agent names the script's cells pair with
+    for pressure in (0, 1, 2, 4, 8, 16):
+        save_under_legacy_names(make_testbed(101, strength=pressure, mu=0.0), range(2), old, N=100)
+        save_under_legacy_names(make_testbed(None, strength=pressure, mu=0.1), range(2), rerun_old, N=100)
     make_testbed(None, strength=4, mu=0.0).save_ensemble(range(2), old)  # the main comparison's cell
     make_testbed(None, strength=4, mu=0.0).save_ensemble(range(2), new)
     env = {**os.environ, "COMPARE_OLD": str(old), "COMPARE_NEW": str(new), "COMPARE_OUT": str(out),

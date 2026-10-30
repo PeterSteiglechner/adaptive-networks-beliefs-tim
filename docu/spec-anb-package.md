@@ -325,8 +325,11 @@ how to plug in a new network.
 ### `io` module
 
 - **`legacy_filename(params, detail) -> str`** reproduces `run_one`'s naming exactly. It reads `lam` and
-  `n_events` from `params` rather than taking them as separate arguments. It doesn't add the `_M`/`_N`/`_tau`
-  suffixes, because `run_one` doesn't either (known issue #4 stays open). The name is relative to the output
+  `n_events` (and optionally `M`, `N`, `tau`) from `params` rather than taking them as separate arguments. It
+  adds the `_M`/`_N`/`_tau` suffixes that `analyse_sensitivity.py` expects when those differ from 10/100/1, which
+  `run_one` doesn't (known issue #4, fixed in `anb` only). Baseline names are `run_one`'s exactly.
+  `parse_filename(name) -> (cell, seed)` is its inverse, and `is_detailed(name)` tells detailed runs apart. The
+  name is relative to the output
   folder (`detailed/` is prepended when `detail`); `SimulationResult.save` writes it under `simOut/` by default,
   while legacy writes to `simOut_old_model/`.
 

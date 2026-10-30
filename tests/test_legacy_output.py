@@ -73,7 +73,9 @@ def test_saved_csv_matches_legacy_path_columns_and_order(combo, detail, two_even
 
     path = result.save(tmp_path / "anb")
 
-    assert path == tmp_path / "anb" / expected_path.relative_to("simOut_old_model")
+    # legacy runs 100 agents and never writes `_N` (known issue #4); the N-agent anb run is named with it
+    legacy_name = str(expected_path.relative_to("simOut_old_model"))
+    assert path == tmp_path / "anb" / legacy_name.replace("_seed7", f"_seed7_N{N:.2f}")
     got = pd.read_csv(path)
     assert list(got.columns) == list(expected.columns)
     assert list(result.to_frame().columns) == list(expected.columns)[1:]  # legacy's first column is the index
