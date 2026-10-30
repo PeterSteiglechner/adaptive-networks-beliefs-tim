@@ -10,7 +10,8 @@ What it holds (all on the paper's time structure, T = 200, pressure at t = 101�
 - social adaptation (`SOCIAL`), adaptive at s = 4, ensemble seed 1 only: μ ∈ {0.005, 0.2} for the paper base (Fig. 6's
   example μ values) and μ = 0.2 for the M/N/τ variant;
 - Fig. A8's single-parameter variants of the paper base (`SENSITIVITY`), staticlow, statichigh and adaptive at s = 4,
-  seed 0: the M row complete (M ∈ {5, 15}), the τ row only half (τ = 2, no τ = 10);
+  seed 0: the M row and the N row complete (M ∈ {5, 15}; N ∈ {50, 200} with p = 10/N), the τ row only half (τ = 2,
+  no τ = 10);
 - stray files that don't follow the naming scheme (`STRAY`).
 
 Run as a script (`python tests/sim_folder.py OUT_DIR`) to build it in a fresh interpreter, which `conftest.py`
@@ -38,7 +39,7 @@ DETAILED = dict(config="adaptive", s=4, seed=2)
 VARIANT = dict(M=6, N=50, tau=2)
 OTHER_LINK_PROB = 0.2
 SOCIAL = dict(mus=(0.005, 0.2), variant_mus=(0.2,), seed=1)
-SENSITIVITY = (dict(M=5), dict(M=15), dict(tau=2))
+SENSITIVITY = (dict(M=5), dict(M=15), dict(N=50, link_prob=0.2), dict(N=200, link_prob=0.05), dict(tau=2))
 SENSITIVITY_CONFIGS = ("staticlow", "statichigh", "adaptive")
 STRAY = ("notes.csv", "detailed/sim_typo_fixedBNatt100.csv")
 

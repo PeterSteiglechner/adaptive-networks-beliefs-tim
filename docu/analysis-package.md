@@ -77,7 +77,9 @@ The package writes the `_M{M:.2f}`, `_N{N:.2f}` and `_tau{tau:.2f}` suffixes onl
   still made. With fewer than `min_seeds` (default 1), the figure is not applicable.
 - If a figure needs a fixed grid (configs, pressure panels), every cell of the grid must be there. Fig. A8 is the
   exception: it needs its base cells, and a sensitivity row with a variant missing is left out of the grid with a
-  **`MissingLevelsWarning`** naming the missing cells (not applicable if no row is complete).
+  **`MissingLevelsWarning`** naming the missing cells (not applicable if no row is complete). For a non-paper base,
+  a variant equal to the base is dropped, and a variant shown at the base's value in its row (N = 50, p = 0.2 for a
+  base of N = 50, p = 0.1) is dropped with a `MissingLevelsWarning` naming it, so it isn't pooled with the base's runs.
 - Pressure levels inside a panel (an x-axis, bars) use the paper's levels that exist. The missing ones get a
   **`MissingLevelsWarning`** (a `UserWarning`), and if none exist, the figure is not applicable. For Fig. 3 and
   the polarisation summary a level counts only if all four configs have it.
