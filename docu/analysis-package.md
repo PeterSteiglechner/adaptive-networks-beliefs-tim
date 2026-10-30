@@ -146,3 +146,17 @@ counts `latecompliant`, Fig. 6 doesn't).
 
 One deliberate change: figures use every seed they find, so Fig. 3 on a 100-seed folder uses 100 seeds instead
 of the old script's 20. Pass `seeds=range(20)` to reproduce the old Fig. 3.
+
+### Checking against the old scripts
+
+`pytest -m slow tests/test_old_vs_new_*.py` runs the unchanged `analyse_*.py` scripts on `simOut_old_model` and
+compares their globals with the package's `FigureResult.data` and tables. It's skipped when that folder is
+missing. The harness (`tests/old_scripts.py`, fixture `old_script`) runs a script cell by cell in a temporary
+directory (`simOut` links to `simOut_old_model`, `figs/` exists, Agg backend). Each script runs once per session.
+A cell that fails under the current dependencies is reported by number and line, and the later cells still run,
+so a comparison can use the parts that ran. PNGs are compared with `png_difference`, the fraction of pixels whose
+RGB values differ by more than 0.05.
+
+| Figure | Old script | Compared | PNG threshold (measured) |
+|---|---|---|---|
+| Fig. 2 | `analyse_timeseries.py` | focal trajectories, example BNs, `example_agent_stats`, `focal_sign_counts`: exact | 0.1 % (0.004 %) |

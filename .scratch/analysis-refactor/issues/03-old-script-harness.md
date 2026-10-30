@@ -11,8 +11,13 @@
 
 **Blocked by:** #02
 
-**Status:** open
+**Status:** done
 
-- [ ] The old scripts on disk are unchanged (checked with git), and nothing is written into the repo
-- [ ] The Fig. 2 numbers match the old script exactly, and the PNG diff is small (the threshold is documented)
-- [ ] It runs in `pytest -m slow`, and the default `pytest` doesn't touch it
+- [x] The old scripts on disk are unchanged (checked with git), and nothing is written into the repo
+- [x] The Fig. 2 numbers match the old script exactly, and the PNG diff is small (the threshold is documented)
+- [x] It runs in `pytest -m slow`, and the default `pytest` doesn't touch it
+
+Notes: the harness runs cell by cell (`exec` of each `# %%` cell, compiled with the script's path and line numbers)
+rather than with `runpy.run_path`, so a script that fails part-way keeps its globals. A fast test of the harness on
+a stand-in script is in `tests/test_old_scripts_harness.py`. Fig. 2 matches exactly; 0.004 % of the PNG pixels
+differ (threshold 0.1 %, in `docu/analysis-package.md`).
